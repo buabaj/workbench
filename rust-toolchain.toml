@@ -1,0 +1,4 @@
+[toolchain]
+# keyring 4.x requires Rust >= 1.88 (edition 2024). Homebrew rustc is too old — use rustup.
+channel = "stable"
+components = ["rustfmt", "clippy"]

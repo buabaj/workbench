@@ -1,0 +1,63 @@
+/* Prime Workbench — locked design tokens. Ground truth: design/DESIGN.md (Amber). */
+
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("../assets/fonts/SourceSerif4Variable-Roman.ttf") format("truetype-variations");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("../assets/fonts/SourceSerif4Variable-Italic.ttf") format("truetype-variations");
+  font-weight: 200 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/JetBrainsMono-Variable.ttf") format("truetype-variations");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* surfaces */
+  --canvas: #0f1012;
+  --surface: #151619;
+  --surface-raised: #1b1d21;
+
+  /* ink — warm paper, never pure white */
+  --ink: #e4dfd3;
+  --ink-muted: #9a968b;
+  --ink-faint: #5c5a54;
+
+  /* structure — cool gray */
+  --structure: #2a2c31;
+  --structure-strong: #3d4048;
+
+  /* accent — pale amber (acid-green permanently vetoed) */
+  --accent: #d9a441;
+  --accent-dim: #8a6a2e;
+  --accent-ink: #141005;
+
+  /* semantic */
+  --link: #7fb2be;
+  --danger: #c0503c; /* destructive/error ONLY */
+
+  /* type */
+  --serif: "Source Serif 4", Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+
+  /* shape */
+  --r: 3px;
+
+  /* layout constants (comp A) */
+  --bar-h: 44px;
+  --rail-w: 232px;
+  --inspector-w: 300px;
+  --composer-h: 88px;
+  --doc-measure: 660px;
+  --traffic-inset: 84px;
+}

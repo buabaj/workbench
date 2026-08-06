@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comp C — Ice · Prime Workbench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Martian+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --canvas:#101214; --surface:#16181B; --surface-raised:#1C1F23;
+    --ink:#DFDCD4; --ink-muted:#98978F; --ink-faint:#5A5B58;
+    --structure:#282B2F; --structure-strong:#3B3F45;
+    --accent:#8FB6D4; --accent-dim:#4C6B82; --accent-ink:#0A1219;
+    --link:#83AEB9; --danger:#BE5340;
+    --serif:"Source Serif 4", Georgia, serif;
+    --mono:"Martian Mono", ui-monospace, monospace;
+    --r:4px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; }
+  body { background:var(--canvas); color:var(--ink); font-family:var(--mono); font-size:11px;
+         font-weight:400; overflow:hidden; }
+
+  .app { display:grid; height:100vh; grid-template-rows:46px 1fr 90px;
+         grid-template-columns:240px 1fr 304px;
+         grid-template-areas:"bar bar bar" "rail canvas inspector" "composer composer composer"; }
+
+  .bar { grid-area:bar; display:flex; align-items:center; gap:20px; padding:0 18px 0 86px;
+         border-bottom:1px solid var(--structure); }
+  .bar .ws { font-weight:500; letter-spacing:.02em; }
+  .bar .mode { display:flex; border:1px solid var(--structure); border-radius:var(--r); overflow:hidden; }
+  .bar .mode span { padding:5px 14px; color:var(--ink-faint); font-size:10px; }
+  .bar .mode .on { background:var(--surface-raised); color:var(--accent); }
+  .bar .search { margin-left:auto; color:var(--ink-faint); border:1px solid var(--structure);
+                 border-radius:var(--r); padding:5px 12px; width:220px; font-size:10px; }
+
+  .rail { grid-area:rail; border-right:1px solid var(--structure); padding:18px 0; overflow-y:auto; }
+  .sect { margin-bottom:24px; }
+  .sect h3 { font-size:9px; font-weight:500; letter-spacing:.16em; color:var(--ink-faint);
+             padding:0 18px 8px; }
+  .item { display:flex; align-items:center; gap:8px; padding:5px 18px; color:var(--ink-muted); font-size:10.5px; }
+  .item.on { color:var(--ink); background:var(--surface-raised);
+             box-shadow:inset 2px 0 0 var(--accent); }
+  .item .n { margin-left:auto; font-size:9px; color:var(--ink-faint); }
+  .item .dot { width:5px; height:5px; border-radius:50%; background:var(--accent); }
+
+  .canvas-r { grid-area:canvas; overflow-y:auto; background:var(--surface); }
+  .doc { max-width:680px; margin:0 auto; padding:56px 52px 130px;
+         font-family:var(--serif); font-size:17px; line-height:1.7; }
+  .doc .crumb { font-family:var(--mono); font-size:9.5px; letter-spacing:.12em;
+                color:var(--ink-faint); margin-bottom:30px; }
+  .doc h1 { font-size:30px; font-weight:600; line-height:1.28; margin-bottom:8px; }
+  .doc .meta { font-family:var(--mono); font-size:10px; color:var(--ink-muted); margin-bottom:38px;
+               padding-bottom:20px; border-bottom:1px solid var(--structure); }
+  .doc h2 { font-size:20px; font-weight:600; margin:38px 0 14px; }
+  .doc p { margin-bottom:16px; }
+  .doc .wl { color:var(--link); border-bottom:1px dotted var(--link); }
+  .doc .anchor-blk { border-left:2px solid var(--accent-dim); padding-left:18px; margin:22px 0; }
+  .doc .anchor-blk .tag { font-family:var(--mono); font-size:9.5px; color:var(--accent);
+                          letter-spacing:.08em; display:block; margin-top:7px; }
+  .doc pre { font-family:var(--mono); font-size:11px; line-height:1.65; background:var(--canvas);
+             border:1px solid var(--structure); border-radius:var(--r); padding:16px 18px;
+             margin:20px 0; overflow-x:auto; color:var(--ink-muted); font-weight:300; }
+  .doc pre .k { color:var(--accent); } .doc pre .s { color:var(--link); }
+
+  .inspector { grid-area:inspector; border-left:1px solid var(--structure); overflow-y:auto;
+               padding:18px; display:flex; flex-direction:column; gap:22px; }
+  .panel h3 { font-size:9px; font-weight:500; letter-spacing:.16em; color:var(--ink-faint); margin-bottom:11px; }
+  .ctx { border:1px solid var(--structure); border-radius:var(--r); padding:10px 12px; margin-bottom:8px;
+         background:var(--surface); }
+  .ctx .src { display:flex; justify-content:space-between; font-size:10px; color:var(--ink-muted); margin-bottom:5px; }
+  .ctx .src b { color:var(--ink); font-weight:500; }
+  .ctx .tok { color:var(--ink-faint); font-size:9px; }
+  .agent { border:1px solid var(--structure-strong); border-radius:var(--r); background:var(--surface); padding:13px; }
+  .agent .state { display:flex; align-items:center; gap:13px; margin-bottom:13px; }
+  .matrix { display:grid; grid-template-columns:repeat(7,4px); gap:4px; }
+  .matrix i { width:4px; height:4px; border-radius:50%; background:var(--structure-strong); }
+  .matrix i.a { background:var(--accent); }
+  @keyframes rowpulse { 0%,100%{opacity:.25} 50%{opacity:1} }
+  .matrix.run i.a { animation:rowpulse 1.3s infinite; }
+  .matrix.run i.a:nth-child(7n+2){animation-delay:.12s} .matrix.run i.a:nth-child(7n+3){animation-delay:.24s}
+  .matrix.run i.a:nth-child(7n+4){animation-delay:.36s} .matrix.run i.a:nth-child(7n+5){animation-delay:.48s}
+  .matrix.run i.a:nth-child(7n+6){animation-delay:.6s} .matrix.run i.a:nth-child(7n){animation-delay:.72s}
+  @media (prefers-reduced-motion:reduce){ .matrix.run i.a{animation:none} }
+  .agent .lbl { font-size:10px; letter-spacing:.12em; color:var(--accent); font-weight:500; }
+  .agent .sub { font-size:9.5px; color:var(--ink-muted); }
+  .tool { display:flex; gap:8px; font-size:10px; padding:6px 0; border-top:1px solid var(--structure);
+          color:var(--ink-muted); }
+  .tool .t { color:var(--ink-faint); flex-shrink:0; }
+  .tool .ok { color:var(--accent); }
+  .linkrow { display:flex; gap:8px; font-size:10px; padding:7px 0; border-top:1px solid var(--structure);
+             color:var(--ink-muted); align-items:baseline; }
+  .linkrow .kind { color:var(--accent); font-size:8.5px; letter-spacing:.1em; }
+  .linkrow .to { color:var(--link); }
+
+  .composer { grid-area:composer; border-top:1px solid var(--structure);
+              padding:14px 18px; display:flex; flex-direction:column; gap:9px; }
+  .composer .row1 { display:flex; align-items:center; gap:10px; font-size:9.5px; }
+  .chip { border:1px solid var(--structure); border-radius:var(--r); padding:3px 10px; color:var(--ink-muted); }
+  .chip b { color:var(--ink); font-weight:500; }
+  .chip.origin { color:var(--ink-faint); border-style:dashed; }
+  .composer .row2 { display:flex; gap:10px; align-items:center; }
+  .composer .input { flex:1; border:1px solid var(--structure-strong); border-radius:var(--r);
+                     background:var(--surface); padding:9px 13px; color:var(--ink-faint); }
+  .btn { border:1px solid var(--structure); border-radius:var(--r); padding:8px 13px; color:var(--ink-muted); font-size:10px; }
+  .btn.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="bar">
+    <span class="ws">workbench · anchor-durability</span>
+    <div class="mode"><span>code</span><span class="on">research</span></div>
+    <div class="search">⌘K — search workspace…</div>
+  </div>
+
+  <nav class="rail">
+    <div class="sect"><h3>RESEARCH</h3>
+      <div class="item on">anchor-durability.md <span class="n">4↩</span></div>
+      <div class="item">context-manifests.md <span class="n">2↩</span></div>
+      <div class="item">restore-semantics.md</div>
+    </div>
+    <div class="sect"><h3>CODE</h3>
+      <div class="item">anchors/resolve.rs</div>
+      <div class="item">anchors/hunkmap.rs</div>
+      <div class="item">vcs/snapshot.rs</div>
+    </div>
+    <div class="sect"><h3>TASKS</h3>
+      <div class="item"><span class="dot"></span>implement hunk mapping <span class="n">running</span></div>
+      <div class="item">fingerprint fallback <span class="n">kept</span></div>
+    </div>
+  </nav>
+
+  <main class="canvas-r"><article class="doc">
+    <div class="crumb">RESEARCH / ANCHOR-DURABILITY.MD</div>
+    <h1>Anchor durability under concurrent edits</h1>
+    <div class="meta">edited 14:32 · 1,840 words · 4 backlinks · 2 anchors</div>
+    <p>Line numbers are the weakest possible anchor. Any edit above the target shifts them, and
+    an external editor invalidates them silently. The durable representation has to be derived
+    from <em>content</em>, with position kept only as a hint.</p>
+    <div class="anchor-blk">
+      <p>A code anchor stores a 64-character prefix, the exact span, and a 64-character suffix.
+      Resolution tries exact hash, then hunk-mapping through the last <span class="wl">[[checkpoint]]</span>,
+      then unique search, then fuzzy match — each step downgrades confidence.</p>
+      <span class="tag">⌁ wb-01J2 · supports → anchors/resolve.rs:41–63</span>
+    </div>
+    <h2>Hunk mapping</h2>
+    <p>Because every task snapshots the workspace, we usually hold the file's bytes from the
+    moment the anchor was created. Diffing that snapshot against the current file translates
+    old offsets through the hunk list — near-exact, and cheap.</p>
+    <pre><span class="k">fn</span> resolve(anchor: &Anchor) -> Resolution {
+    <span class="k">if</span> anchor.file_hash == current { <span class="k">return</span> Exact(anchor.hint) }
+    hunk_map(<span class="s">snapshot_at(anchor.created)</span>, current)
+}</pre>
+    <p>Fuzzy matching stays a last resort: duplicated text must resolve as
+    <em>stale</em>, never as a confidently wrong match.</p>
+  </article></main>
+
+  <aside class="inspector">
+    <div class="panel"><h3>CONTEXT SHELF</h3>
+      <div class="ctx"><div class="src"><b>anchor-durability.md</b><span>§ hunk mapping</span></div>
+        <div class="tok">selection · ~340 tokens · included</div></div>
+      <div class="ctx"><div class="src"><b>anchors/resolve.rs</b><span>L41–63</span></div>
+        <div class="tok">code selection · ~210 tokens · included</div></div>
+    </div>
+    <div class="panel"><h3>AGENT ACTIVITY</h3>
+      <div class="agent">
+        <div class="state">
+          <div class="matrix run">
+            <i></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i></i>
+          </div>
+          <div><div class="lbl">RUNNING TOOLS</div><div class="sub">claude · sonnet-5 · thinking: medium</div></div>
+        </div>
+        <div class="tool"><span class="t">14:41:02</span> read_file anchors/resolve.rs <span class="ok">✓</span></div>
+        <div class="tool"><span class="t">14:41:09</span> edit anchors/hunkmap.rs <span class="ok">✓</span></div>
+        <div class="tool"><span class="t">14:41:18</span> bash cargo test -p anchors …</div>
+      </div>
+    </div>
+    <div class="panel"><h3>LINKED EVIDENCE</h3>
+      <div class="linkrow"><span class="kind">SUPPORTS</span><span class="to">resolve.rs:41–63</span></div>
+      <div class="linkrow"><span class="kind">IMPLEMENTS</span><span class="to">hunkmap.rs:12–58</span></div>
+      <div class="linkrow"><span class="kind">TESTS</span><span class="to">anchor_corpus.rs</span></div>
+    </div>
+  </aside>
+
+  <div class="composer">
+    <div class="row1">
+      <span class="chip"><b>claude</b> · sonnet-5 · med</span>
+      <span class="chip origin">workspace default</span>
+      <span class="chip">2 context items · ~550 tok</span>
+    </div>
+    <div class="row2">
+      <div class="input">Describe a task for the agent…</div>
+      <div class="btn">◉ voice</div>
+      <div class="btn primary">Run task</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

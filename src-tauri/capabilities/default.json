@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Minimal surface: core defaults only. Deliberately NO shell permissions — the sidecar is spawned Rust-side, which bypasses the ACL; the webview gets no shell access at all.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
