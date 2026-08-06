@@ -34,7 +34,15 @@ export function AgentActivity() {
       <div className="state-row" style={{ marginBottom: toolFeed.length || text ? 12 : 0 }}>
         <DotMatrix state={matrix} />
         <div style={{ flex: 1 }}>
-          <div className="state-label" style={status === "failed" ? { color: "var(--danger)" } : undefined}>
+          {/* Agent state changes without user action, so it is announced.
+              The label is always present — motion and colour never carry
+              state on their own. */}
+          <div
+            className="state-label"
+            role="status"
+            aria-live="polite"
+            style={status === "failed" ? { color: "var(--danger)" } : undefined}
+          >
             {label}
           </div>
           <div className="state-sub">
@@ -76,7 +84,10 @@ export function AgentActivity() {
                     : "var(--ink-faint)",
             }}
           >
-            {row.status === "running" ? "…" : row.status === "ok" ? "✓" : "✕"}
+            <span aria-hidden>
+              {row.status === "running" ? "…" : row.status === "ok" ? "✓" : "✕"}
+            </span>
+            <span className="sr-only">{row.status}</span>
           </span>
         </div>
       ))}
@@ -103,6 +114,7 @@ export function AgentActivity() {
 
       {error && (
         <div
+          role="alert"
           style={{
             marginTop: 10,
             fontSize: 11,

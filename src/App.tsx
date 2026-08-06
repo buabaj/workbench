@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { AgentActivity } from "./components/AgentActivity";
 import { DotMatrix } from "./components/DotMatrix";
 import { EditorPane } from "./components/EditorPane";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FileTree } from "./components/FileTree";
 import { LinksPanel } from "./components/LinksPanel";
 import { PreflightPanel } from "./components/Preflight";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { SettingsSheet } from "./components/SettingsSheet";
-import { onFsChanged } from "./ipc/client";
+import { ipc, onFsChanged, type WorkspaceView } from "./ipc/client";
 import { useTasks } from "./store/tasks";
 import { useVoice } from "./store/voice";
 import { useWorkspace } from "./store/workspace";
@@ -34,6 +35,8 @@ export default function App() {
 
   const [prompt, setPrompt] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [recent, setRecent] = useState<WorkspaceView[]>([]);
+  const openWorkspace = useWorkspace((s) => s.openWorkspace);
 
   const voicePhase = useVoice((s) => s.phase);
   const voiceElapsed = useVoice((s) => s.elapsedMs);
@@ -46,6 +49,7 @@ export default function App() {
 
   useEffect(() => {
     void refreshPreflight();
+    void ipc.workspaceRecent().then(setRecent).catch(() => {});
     const un = onFsChanged(handleFsChanged);
     return () => {
       void un.then((f) => f());
@@ -106,25 +110,65 @@ export default function App() {
         <div className="bar-search">⌘K — search workspace…</div>
       </header>
 
-      <nav className="rail">
-        {workspace ? (
-          <div className="rail-section">
-            <h3>{workspace.name.toUpperCase()}</h3>
-            <FileTree />
-          </div>
-        ) : (
-          <div className="rail-section">
-            <h3>WORKSPACE</h3>
-            <div className="rail-item" onClick={() => void pickWorkspace()}>
-              Open folder…
+      <nav className="rail" aria-label="Workspace">
+        <ErrorBoundary>
+          {workspace ? (
+            <div className="rail-section">
+              <h3>{workspace.name.toUpperCase()}</h3>
+              <FileTree />
             </div>
-          </div>
-        )}
+          ) : (
+            <>
+              <div className="rail-section">
+                <h3>WORKSPACE</h3>
+                <div
+                  className="rail-item"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => void pickWorkspace()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      void pickWorkspace();
+                    }
+                  }}
+                >
+                  Open folder…
+                </div>
+              </div>
+              {recent.length > 0 && (
+                <div className="rail-section">
+                  <h3>RECENT</h3>
+                  {recent.map((w) => (
+                    <div
+                      key={w.id}
+                      className="rail-item"
+                      role="button"
+                      tabIndex={0}
+                      title={w.rootPath}
+                      onClick={() => void openWorkspace(w.rootPath)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          void openWorkspace(w.rootPath);
+                        }
+                      }}
+                    >
+                      {w.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </ErrorBoundary>
       </nav>
 
-      <main className="canvas">
+      <main className="canvas" aria-label="Editor">
         {active ? (
-          <EditorPane />
+          <ErrorBoundary>
+            <EditorPane />
+          </ErrorBoundary>
         ) : (
           <div className="canvas-empty">
             <DotMatrix state="awaiting-input" />
@@ -143,23 +187,21 @@ export default function App() {
         )}
       </main>
 
-      <aside className="inspector">
-        <div className="panel">
-          <h3>AGENT ACTIVITY</h3>
-          <AgentActivity />
-        </div>
-        <div className="panel">
-          <h3>TASK REVIEW</h3>
-          <ReviewPanel />
-        </div>
-        <div className="panel">
-          <h3>CONTEXT SHELF</h3>
-          <div className="panel-empty">Select text in a document or file, then add it as context.</div>
-        </div>
-        <div className="panel">
-          <h3>LINKED EVIDENCE</h3>
-          <LinksPanel />
-        </div>
+      <aside className="inspector" aria-label="Inspector">
+        <ErrorBoundary>
+          <section className="panel" aria-labelledby="p-agent">
+            <h3 id="p-agent">AGENT ACTIVITY</h3>
+            <AgentActivity />
+          </section>
+          <section className="panel" aria-labelledby="p-review">
+            <h3 id="p-review">TASK REVIEW</h3>
+            <ReviewPanel />
+          </section>
+          <section className="panel" aria-labelledby="p-links">
+            <h3 id="p-links">LINKED EVIDENCE</h3>
+            <LinksPanel />
+          </section>
+        </ErrorBoundary>
       </aside>
 
       <footer className="composer">

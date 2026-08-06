@@ -31,7 +31,10 @@
   /* ink — warm paper, never pure white */
   --ink: #e4dfd3;
   --ink-muted: #9a968b;
-  --ink-faint: #5c5a54;
+  /* Lightened from #5C5A54 (2.76:1 — below even the 3.0 non-text floor).
+     This token labels real text, so it now clears 4.5:1 on ALL three
+     surfaces, raised included. Hue and saturation preserved. */
+  --ink-faint: #88857d;
 
   /* structure — cool gray */
   --structure: #2a2c31;
@@ -44,7 +47,10 @@
 
   /* semantic */
   --link: #7fb2be;
-  --danger: #c0503c; /* destructive/error ONLY */
+  /* Lightened from #C0503C (3.84:1 on surface) — danger carries error text
+     and the conflict banner sits on --surface-raised, so it must clear
+     4.5:1 there too. Hue and saturation preserved. */
+  --danger: #cb6957; /* destructive/error ONLY */
 
   /* type */
   --serif: "Source Serif 4", Georgia, serif;

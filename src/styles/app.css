@@ -124,4 +124,40 @@ body {
   padding: 7px 12px; color: var(--ink-muted); background: none; font: inherit; cursor: default;
 }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
-.btn:focus-visible, .composer-input:focus-visible { outline: 2px solid var(--accent-dim); outline-offset: 1px; }
+/* ── focus + accessibility ────────────────────────────────────────────── */
+
+/* One visible focus treatment for everything keyboard-reachable. Uses
+   :focus-visible so pointer users never see a ring they didn't ask for. */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible,
+.rail-item:focus-visible,
+.cm-editor.cm-focused {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--r);
+}
+
+.rail-item { cursor: default; }
+.rail-item:hover { background: var(--surface-raised); }
+
+/* Screen-reader-only text: announces state that colour or shape carries. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Reduced motion is respected globally, not per-component: any animation
+   added later is covered by default. The dot-matrix keeps its static
+   per-state pattern, which is why state is never carried by motion alone. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

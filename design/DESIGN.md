@@ -31,7 +31,7 @@ Ground truth: comp `design/comps/amber.html` (Comp A). The other two comps (`sig
   /* ink — warm paper, never pure white */
   --ink:            #E4DFD3;
   --ink-muted:      #9A968B;
-  --ink-faint:      #5C5A54;
+  --ink-faint:      #88857D;   /* was #5C5A54 — see contrast note below */
 
   /* structure — cool gray */
   --structure:        #2A2C31;
@@ -44,7 +44,7 @@ Ground truth: comp `design/comps/amber.html` (Comp A). The other two comps (`sig
 
   /* semantic */
   --link:   #7FB2BE;        /* muted cyan — links, cross-mode references */
-  --danger: #C0503C;        /* destructive/error ONLY */
+  --danger: #CB6957;        /* destructive/error ONLY — was #C0503C */
 
   /* type */
   --serif: "Source Serif 4", Georgia, serif;
@@ -54,6 +54,26 @@ Ground truth: comp `design/comps/amber.html` (Comp A). The other two comps (`sig
   --r: 3px;
 }
 ```
+
+### Contrast (audited 2026-08-06, enforced)
+
+Every token that carries text clears **WCAG AA 4.5:1 against all three
+surfaces** (`--canvas`, `--surface`, `--surface-raised`):
+
+| token | min ratio |
+|---|---|
+| `--ink` | 12.69 |
+| `--ink-muted` | 5.71 |
+| `--ink-faint` | 4.58 |
+| `--accent` | 7.50 |
+| `--link` | 7.24 |
+| `--danger` | 4.58 |
+
+Two originals failed and were lightened with hue and saturation preserved:
+`--ink-faint` was #5C5A54 (2.76:1 — below even the 3.0 non-text floor, and it
+labels real text), and `--danger` was #C0503C (3.84:1 on surface; it carries
+error copy and the conflict banner sits on `--surface-raised`). Re-run the audit
+if any surface or text token changes.
 
 Both fonts are OFL — **vendor them into the app** (`@font-face` from packaged assets; the CSP
 forbids external fonts). Weights needed: Source Serif 4 — 400, 600, 400-italic (optical size

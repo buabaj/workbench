@@ -28,6 +28,7 @@ function ConflictBanner({ workspaceId, relPath }: { workspaceId: string; relPath
 
   return (
     <div
+      role="alert"
       style={{
         display: "flex",
         gap: 10,
@@ -38,7 +39,9 @@ function ConflictBanner({ workspaceId, relPath }: { workspaceId: string; relPath
         fontSize: 11,
       }}
     >
-      <span style={{ color: "var(--danger)" }}>⚠</span>
+      <span aria-hidden style={{ color: "var(--danger)" }}>
+        ⚠
+      </span>
       <span style={{ color: "var(--ink-muted)" }}>
         Changed on disk while you had unsaved edits.
       </span>
@@ -77,6 +80,8 @@ function Tabs() {
   if (tabs.length === 0) return null;
   return (
     <div
+      role="tablist"
+      aria-label="Open files"
       style={{
         display: "flex",
         gap: 2,
@@ -92,7 +97,20 @@ function Tabs() {
         return (
           <div
             key={t}
+            role="tab"
+            aria-selected={t === active}
+            aria-label={`${name}${phase === "dirty" ? ", unsaved" : ""}`}
+            tabIndex={0}
             onClick={() => setActive(t)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setActive(t);
+              } else if (e.key === "Backspace" || e.key === "Delete") {
+                e.preventDefault();
+                closeFile(t);
+              }
+            }}
             style={{
               display: "flex",
               gap: 7,
@@ -107,16 +125,28 @@ function Tabs() {
             }}
           >
             {name}
-            {phase === "dirty" && <span style={{ color: "var(--accent)", fontSize: 9 }}>●</span>}
-            <span
-              style={{ color: "var(--ink-faint)", fontSize: 10 }}
+            {phase === "dirty" && (
+              <span aria-hidden style={{ color: "var(--accent)", fontSize: 9 }}>
+                ●
+              </span>
+            )}
+            <button
+              aria-label={`Close ${name}`}
+              style={{
+                color: "var(--ink-faint)",
+                fontSize: 10,
+                background: "none",
+                border: "none",
+                font: "inherit",
+                padding: 0,
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 closeFile(t);
               }}
             >
               ✕
-            </span>
+            </button>
           </div>
         );
       })}
