@@ -18,6 +18,9 @@ use crate::AppState;
 pub struct OpenWorkspaces {
     pub roots: Mutex<HashMap<String, WorkspaceRoot>>,
     pub watchers: Mutex<HashMap<String, WorkspaceWatcher>>,
+    /// Cached relative paths for fuzzy open. Rebuilt on demand; the watcher
+    /// invalidates it so a new file shows up in ⌘P without a restart.
+    pub index: Mutex<HashMap<String, Vec<String>>>,
 }
 
 impl From<PathError> for AppError {
@@ -218,4 +221,93 @@ pub fn file_write(
     let root = root_for(&open, &workspace_id)?;
     let p = root.resolve(&path, Intent::Write)?;
     Ok(ops::write(&p, &text, expected_hash.as_deref())?)
+}
+
+/// Cap the index so a pathological tree can't exhaust memory. 20k paths is far
+/// beyond what fuzzy-open stays useful at.
+const MAX_INDEXED: usize = 20_000;
+
+/// Every non-ignored file path in the workspace, for fuzzy open. Cached until
+/// invalidated by a filesystem change.
+#[tauri::command]
+pub fn workspace_index(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+    refresh: bool,
+) -> Result<Vec<String>, AppError> {
+    if !refresh {
+        if let Some(cached) = open.index.lock().unwrap().get(&workspace_id) {
+            return Ok(cached.clone());
+        }
+    }
+    let root = root_for(&open, &workspace_id)?;
+    let mut paths = Vec::new();
+    let walker = ignore::WalkBuilder::new(root.real())
+        .hidden(false)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .require_git(false)
+        .filter_entry(|e| e.file_name() != ".git")
+        .build();
+    for entry in walker.flatten() {
+        if entry.file_type().is_some_and(|t| t.is_dir()) {
+            continue;
+        }
+        let Ok(rel) = entry.path().strip_prefix(root.real()) else {
+            continue;
+        };
+        let rel = rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        if !rel.is_empty() {
+            paths.push(rel);
+        }
+        if paths.len() >= MAX_INDEXED {
+            break;
+        }
+    }
+    paths.sort();
+    open.index
+        .lock()
+        .unwrap()
+        .insert(workspace_id, paths.clone());
+    Ok(paths)
+}
+
+/// Per-workspace settings (layout geometry, open tabs). The table exists from
+/// migration 0001; these are the generic accessors.
+#[tauri::command]
+pub fn workspace_setting_get(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    key: String,
+) -> Result<Option<serde_json::Value>, AppError> {
+    let conn = state.db.lock().expect("db lock");
+    let raw: Option<String> = conn
+        .query_row(
+            "SELECT value_json FROM workspace_settings WHERE workspace_id = ?1 AND key = ?2",
+            rusqlite::params![workspace_id, key],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(raw.and_then(|v| serde_json::from_str(&v).ok()))
+}
+
+#[tauri::command]
+pub fn workspace_setting_set(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    key: String,
+    value: serde_json::Value,
+) -> Result<(), AppError> {
+    let conn = state.db.lock().expect("db lock");
+    conn.execute(
+        "INSERT INTO workspace_settings (workspace_id, key, value_json) VALUES (?1, ?2, ?3)
+         ON CONFLICT(workspace_id, key) DO UPDATE SET value_json = excluded.value_json",
+        rusqlite::params![workspace_id, key, serde_json::to_string(&value).unwrap_or_default()],
+    )?;
+    Ok(())
 }

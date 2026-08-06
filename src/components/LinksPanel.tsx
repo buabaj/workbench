@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { AnchorStatus, LinkView } from "../ipc/client";
 import { LINK_KINDS, otherEnd, useLinks } from "../store/links";
+import { useLayout } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
 
 const KIND_LABEL: Record<string, string> = {
@@ -97,7 +98,7 @@ function LinkRow({ link, relPath }: { link: LinkView; relPath: string }) {
 
 export function LinksPanel() {
   const workspace = useWorkspace((s) => s.workspace);
-  const active = useWorkspace((s) => s.active);
+  const active = useLayout((s) => s.activeFile());
   const selection = useLinks((s) => s.selection);
   const pinned = useLinks((s) => s.pinned);
   const links = useLinks((s) => s.links);

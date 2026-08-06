@@ -234,6 +234,12 @@ export const ipc = {
     expectedHash: string | null,
   ) => invoke<WriteOutcome>("file_write", { workspaceId, path, text, expectedHash }),
   agentPreflight: () => invoke<PreflightReport>("agent_preflight"),
+  workspaceIndex: (workspaceId: string, refresh: boolean) =>
+    invoke<string[]>("workspace_index", { workspaceId, refresh }),
+  workspaceSettingGet: (workspaceId: string, key: string) =>
+    invoke<unknown | null>("workspace_setting_get", { workspaceId, key }),
+  workspaceSettingSet: (workspaceId: string, key: string, value: unknown) =>
+    invoke<void>("workspace_setting_set", { workspaceId, key, value }),
 
   credsList: () => invoke<CredentialProfileView[]>("creds_list"),
   credsAdd: (input: {

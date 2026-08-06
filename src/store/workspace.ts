@@ -8,6 +8,7 @@ import {
   type WorkspaceView,
 } from "../ipc/client";
 import { editorRegistry } from "../editor/editorRegistry";
+import { fileTabId, useLayout } from "./layout";
 
 export type BufferPhase = "clean" | "dirty" | "conflict" | "deleted";
 
@@ -23,8 +24,6 @@ interface WorkspaceStore {
   mode: "code" | "research";
   childrenByPath: Record<string, TreeNode[]>;
   expanded: Record<string, boolean>;
-  tabs: string[];
-  active: string | null;
   buffers: Record<string, BufferMeta>;
   /** Range an editor should scroll to and select once mounted (cross-mode nav). */
   pendingReveal: { relPath: string; from: number; to: number } | null;
@@ -38,7 +37,6 @@ interface WorkspaceStore {
   revealRange(relPath: string, from: number, to: number): void;
   consumeReveal(relPath: string): { from: number; to: number } | null;
   closeFile(relPath: string): void;
-  setActive(relPath: string): void;
   markDirty(relPath: string): void;
   markSaved(relPath: string, diskHash: string): void;
   markConflict(relPath: string): void;
@@ -53,8 +51,6 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   mode: "research",
   childrenByPath: {},
   expanded: {},
-  tabs: [],
-  active: null,
   buffers: {},
   pendingReveal: null,
 
@@ -64,7 +60,8 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     const ws = await ipc.workspacePick();
     if (ws) {
       editorRegistry.clear();
-      set({ workspace: ws, childrenByPath: {}, expanded: {}, tabs: [], active: null, buffers: {} });
+      set({ workspace: ws, childrenByPath: {}, expanded: {}, buffers: {} });
+      await useLayout.getState().hydrate(ws.id);
       await get().loadChildren("");
     }
   },
@@ -72,7 +69,8 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   openWorkspace: async (path) => {
     const ws = await ipc.workspaceOpen(path);
     editorRegistry.clear();
-    set({ workspace: ws, childrenByPath: {}, expanded: {}, tabs: [], active: null, buffers: {} });
+    set({ workspace: ws, childrenByPath: {}, expanded: {}, buffers: {} });
+    await useLayout.getState().hydrate(ws.id);
     await get().loadChildren("");
   },
 
@@ -93,20 +91,14 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   },
 
   openFile: (relPath) => {
-    set((s) => ({
-      tabs: s.tabs.includes(relPath) ? s.tabs : [...s.tabs, relPath],
-      active: relPath,
-      mode: relPath.toLowerCase().endsWith(".md") ? "research" : "code",
-    }));
+    useLayout.getState().openFileTab(relPath);
   },
 
   revealRange: (relPath, from, to) => {
-    set((s) => ({
-      tabs: s.tabs.includes(relPath) ? s.tabs : [...s.tabs, relPath],
-      active: relPath,
-      mode: relPath.toLowerCase().endsWith(".md") ? "research" : "code",
-      pendingReveal: { relPath, from, to },
-    }));
+    // Activating the tab mounts the editor, which consumes the reveal — so
+    // navigation works whether the target was open, behind chat, or closed.
+    useLayout.getState().openFileTab(relPath);
+    set({ pendingReveal: { relPath, from, to } });
   },
 
   consumeReveal: (relPath) => {
@@ -117,24 +109,13 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   },
 
   closeFile: (relPath) => {
-    editorRegistry.delete(relPath);
+    useLayout.getState().closeTab(fileTabId(relPath));
     set((s) => {
-      const tabs = s.tabs.filter((t) => t !== relPath);
       const buffers = { ...s.buffers };
       delete buffers[relPath];
-      return {
-        tabs,
-        buffers,
-        active: s.active === relPath ? (tabs[tabs.length - 1] ?? null) : s.active,
-      };
+      return { buffers };
     });
   },
-
-  setActive: (relPath) =>
-    set({
-      active: relPath,
-      mode: relPath.toLowerCase().endsWith(".md") ? "research" : "code",
-    }),
 
   markDirty: (relPath) =>
     set((s) => ({

@@ -1,10 +1,11 @@
+import { useLayout } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
 import { FileIcon, FolderIcon } from "../icons/fileIcon";
 import type { TreeNode } from "../ipc/client";
 
 function Row({ node, depth }: { node: TreeNode; depth: number }) {
   const expanded = useWorkspace((s) => s.expanded[node.relPath] ?? false);
-  const active = useWorkspace((s) => s.active === node.relPath);
+  const active = useLayout((s) => s.activeFile() === node.relPath);
   const phase = useWorkspace((s) => s.buffers[node.relPath]?.phase);
   const toggleDir = useWorkspace((s) => s.toggleDir);
   const openFile = useWorkspace((s) => s.openFile);

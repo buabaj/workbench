@@ -1,4 +1,5 @@
 import { useEditorSession } from "../editor/useEditorSession";
+import { useLayout } from "../store/layout";
 import { saveBuffer, useWorkspace } from "../store/workspace";
 import { ipc } from "../ipc/client";
 import { editorRegistry } from "../editor/editorRegistry";
@@ -57,103 +58,18 @@ function ConflictBanner({ workspaceId, relPath }: { workspaceId: string; relPath
 
 export function EditorPane() {
   const workspace = useWorkspace((s) => s.workspace);
-  const active = useWorkspace((s) => s.active);
+  const active = useLayout((s) => s.activeFile());
   const phase = useWorkspace((s) => (active ? s.buffers[active]?.phase : undefined));
 
   if (!workspace || !active) return null;
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {phase === "conflict" && <ConflictBanner workspaceId={workspace.id} relPath={active} />}
-      <Tabs />
       <Editor key={active} workspaceId={workspace.id} relPath={active} />
     </div>
   );
 }
 
-function Tabs() {
-  const tabs = useWorkspace((s) => s.tabs);
-  const active = useWorkspace((s) => s.active);
-  const buffers = useWorkspace((s) => s.buffers);
-  const setActive = useWorkspace((s) => s.setActive);
-  const closeFile = useWorkspace((s) => s.closeFile);
-
-  if (tabs.length === 0) return null;
-  return (
-    <div
-      role="tablist"
-      aria-label="Open files"
-      style={{
-        display: "flex",
-        gap: 2,
-        padding: "var(--s-2) var(--s-3)",
-        borderBottom: "1px solid var(--border)",
-        overflowX: "auto",
-        flexShrink: 0,
-      }}
-    >
-      {tabs.map((t) => {
-        const name = t.split("/").pop();
-        const phase = buffers[t]?.phase;
-        return (
-          <div
-            key={t}
-            role="tab"
-            aria-selected={t === active}
-            aria-label={`${name}${phase === "dirty" ? ", unsaved" : ""}`}
-            tabIndex={0}
-            onClick={() => setActive(t)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setActive(t);
-              } else if (e.key === "Backspace" || e.key === "Delete") {
-                e.preventDefault();
-                closeFile(t);
-              }
-            }}
-            style={{
-              display: "flex",
-              gap: 7,
-              alignItems: "center",
-              padding: "5px 12px",
-              fontSize: "var(--text-sm)",
-              fontWeight: t === active ? 500 : 400,
-              color: t === active ? "var(--ink)" : "var(--ink-muted)",
-              background: t === active ? "var(--canvas)" : "transparent",
-              border: `1px solid ${t === active ? "var(--border)" : "transparent"}`,
-              borderRadius: "var(--r-control)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {name}
-            {phase === "dirty" && (
-              <span aria-hidden style={{ color: "var(--clay-text)", fontSize: 9 }}>
-                ●
-              </span>
-            )}
-            <button
-              aria-label={`Close ${name}`}
-              style={{
-                color: "var(--ink-faint)",
-                fontSize: 10,
-                background: "none",
-                border: "none",
-                font: "inherit",
-                padding: 0,
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                closeFile(t);
-              }}
-            >
-              ✕
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 function Editor({ workspaceId, relPath }: { workspaceId: string; relPath: string }) {
   const { mount, viewRef } = useEditorSession(workspaceId, relPath);
