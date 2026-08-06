@@ -3,6 +3,7 @@ import { AgentActivity } from "./components/AgentActivity";
 import { DotMatrix } from "./components/DotMatrix";
 import { EditorPane } from "./components/EditorPane";
 import { FileTree } from "./components/FileTree";
+import { LinksPanel } from "./components/LinksPanel";
 import { PreflightPanel } from "./components/Preflight";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { SettingsSheet } from "./components/SettingsSheet";
@@ -119,7 +120,7 @@ export default function App() {
         </div>
         <div className="panel">
           <h3>LINKED EVIDENCE</h3>
-          <div className="panel-empty">Links between research and code appear here.</div>
+          <LinksPanel />
         </div>
       </aside>
 

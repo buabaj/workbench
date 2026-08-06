@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod anchors;
 pub mod commands;
 pub mod creds;
 pub mod db;
@@ -102,6 +103,10 @@ pub fn run() {
             commands::review::review_keep,
             commands::review::review_restore,
             commands::review::review_note_user_edit,
+            commands::links::link_create,
+            commands::links::link_delete,
+            commands::links::links_for_file,
+            commands::links::link_kinds,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

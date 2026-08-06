@@ -9,7 +9,15 @@ import {
   researchExtensions,
 } from "./extensions";
 import { ipc, onFsChanged } from "../ipc/client";
+import { useLinks } from "../store/links";
 import { saveBuffer, useWorkspace } from "../store/workspace";
+
+const MAX_EXCERPT = 90;
+
+function excerpt(text: string): string {
+  const flat = text.split(/\s+/).filter(Boolean).join(" ");
+  return flat.length > MAX_EXCERPT ? `${flat.slice(0, MAX_EXCERPT)}…` : flat;
+}
 
 /**
  * Owns one CodeMirror view for one file. The authoritative EditorState lives in
@@ -27,6 +35,22 @@ export function useEditorSession(workspaceId: string, relPath: string) {
 
       const dirtyListener = EditorView.updateListener.of((u) => {
         if (u.docChanged) useWorkspace.getState().markDirty(relPath);
+        if (u.selectionSet || u.docChanged) {
+          // Selection drives link creation. Only the summary reaches the store —
+          // mirroring selection text into React on every keystroke is the
+          // re-render trap this architecture avoids.
+          const range = u.state.selection.main;
+          useLinks.getState().setSelection(
+            range.empty
+              ? null
+              : {
+                  relPath,
+                  from: range.from,
+                  to: range.to,
+                  excerpt: excerpt(u.state.sliceDoc(range.from, range.to)),
+                },
+          );
+        }
       });
       const saveKeymap = EditorView.domEventHandlers({
         keydown: (event, v) => {
@@ -61,6 +85,19 @@ export function useEditorSession(workspaceId: string, relPath: string) {
           useWorkspace.getState().markSaved(relPath, diskHash);
         }
         if (!isResearchFile(relPath)) void applyLanguage(view, relPath);
+
+        // Cross-mode navigation: a link click parked a range for this file.
+        const reveal = useWorkspace.getState().consumeReveal(relPath);
+        if (reveal && view) {
+          const max = view.state.doc.length;
+          const from = Math.min(reveal.from, max);
+          const to = Math.min(reveal.to, max);
+          view.dispatch({
+            selection: { anchor: from, head: to },
+            effects: EditorView.scrollIntoView(from, { y: "center" }),
+          });
+          view.focus();
+        }
       };
 
       const saved = editorRegistry.get(relPath);
@@ -90,6 +127,24 @@ export function useEditorSession(workspaceId: string, relPath: string) {
     },
     [workspaceId, relPath],
   );
+
+  // Reveal requests for a file that is ALREADY mounted (no remount to hook).
+  useEffect(() => {
+    return useWorkspace.subscribe((state) => {
+      const pending = state.pendingReveal;
+      const view = viewRef.current;
+      if (!pending || pending.relPath !== relPath || !view) return;
+      useWorkspace.getState().consumeReveal(relPath);
+      const max = view.state.doc.length;
+      const from = Math.min(pending.from, max);
+      const to = Math.min(pending.to, max);
+      view.dispatch({
+        selection: { anchor: from, head: to },
+        effects: EditorView.scrollIntoView(from, { y: "center" }),
+      });
+      view.focus();
+    });
+  }, [relPath]);
 
   // External-change policy: clean buffer → silent reload preserving cursor;
   // dirty buffer whose disk hash moved → conflict.

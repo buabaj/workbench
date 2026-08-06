@@ -154,6 +154,38 @@ export interface TaskDiff {
   attributionDegraded: boolean;
 }
 
+export interface AnchorSpec {
+  relPath: string;
+  from: number;
+  to: number;
+}
+
+export type AnchorStatus = "ok" | "stale" | "broken";
+
+export interface AnchorView {
+  id: string;
+  relPath: string;
+  excerpt: string;
+  status: AnchorStatus;
+  confidence: number;
+  from: number;
+  to: number;
+}
+
+export interface LinkView {
+  id: string;
+  kind: string;
+  note: string | null;
+  src: AnchorView;
+  dst: AnchorView;
+  createdAt: number;
+}
+
+export interface FileLinks {
+  outgoing: LinkView[];
+  incoming: LinkView[];
+}
+
 export interface RestoreResult {
   restored: string[];
   trashed: string[];
@@ -202,6 +234,18 @@ export const ipc = {
     invoke<void>("profiles_set_default", { workspaceId, profileId }),
   profilesResolve: (workspaceId: string | null, taskOverride: string | null) =>
     invoke<ResolvedAgentProfile>("profiles_resolve", { workspaceId, taskOverride }),
+
+  linkCreate: (
+    workspaceId: string,
+    kind: string,
+    src: AnchorSpec,
+    dst: AnchorSpec,
+    note: string | null,
+  ) => invoke<LinkView>("link_create", { workspaceId, kind, src, dst, note }),
+  linkDelete: (id: string) => invoke<void>("link_delete", { id }),
+  linksForFile: (workspaceId: string, relPath: string) =>
+    invoke<FileLinks>("links_for_file", { workspaceId, relPath }),
+  linkKinds: () => invoke<string[]>("link_kinds"),
 
   reviewTaskDiff: (taskId: string) => invoke<TaskDiff>("review_task_diff", { taskId }),
   reviewFilePatch: (taskId: string, relPath: string) =>

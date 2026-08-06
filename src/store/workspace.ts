@@ -26,6 +26,8 @@ interface WorkspaceStore {
   tabs: string[];
   active: string | null;
   buffers: Record<string, BufferMeta>;
+  /** Range an editor should scroll to and select once mounted (cross-mode nav). */
+  pendingReveal: { relPath: string; from: number; to: number } | null;
 
   setMode(mode: "code" | "research"): void;
   pickWorkspace(): Promise<void>;
@@ -33,6 +35,8 @@ interface WorkspaceStore {
   loadChildren(subpath: string): Promise<void>;
   toggleDir(relPath: string): void;
   openFile(relPath: string): void;
+  revealRange(relPath: string, from: number, to: number): void;
+  consumeReveal(relPath: string): { from: number; to: number } | null;
   closeFile(relPath: string): void;
   setActive(relPath: string): void;
   markDirty(relPath: string): void;
@@ -52,6 +56,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   tabs: [],
   active: null,
   buffers: {},
+  pendingReveal: null,
 
   setMode: (mode) => set({ mode }),
 
@@ -93,6 +98,22 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       active: relPath,
       mode: relPath.toLowerCase().endsWith(".md") ? "research" : "code",
     }));
+  },
+
+  revealRange: (relPath, from, to) => {
+    set((s) => ({
+      tabs: s.tabs.includes(relPath) ? s.tabs : [...s.tabs, relPath],
+      active: relPath,
+      mode: relPath.toLowerCase().endsWith(".md") ? "research" : "code",
+      pendingReveal: { relPath, from, to },
+    }));
+  },
+
+  consumeReveal: (relPath) => {
+    const pending = get().pendingReveal;
+    if (!pending || pending.relPath !== relPath) return null;
+    set({ pendingReveal: null });
+    return { from: pending.from, to: pending.to };
   },
 
   closeFile: (relPath) => {
