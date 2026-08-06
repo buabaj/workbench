@@ -7,3 +7,8 @@ src-tauri/gen/schemas/
 
 # Release artifacts
 *.dmg
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example

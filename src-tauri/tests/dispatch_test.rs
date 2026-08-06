@@ -2,8 +2,8 @@
 
 use std::time::Duration;
 
-use prime_workbench_lib::agent::child::{MockChild, RawOutput};
-use prime_workbench_lib::agent::dispatch::{DispatchError, Dispatcher, StreamItem};
+use workbench_lib::agent::child::{MockChild, RawOutput};
+use workbench_lib::agent::dispatch::{DispatchError, Dispatcher, StreamItem};
 use serde_json::json;
 
 /// Poll MockChild's recorded stdin until `n` lines have been written.

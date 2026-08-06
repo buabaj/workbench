@@ -1,11 +1,11 @@
 [package]
-name = "prime-workbench"
+name = "workbench"
 version = "0.1.0"
 description = "Workbench — local-first research and coding environment"
 edition = "2021"
 
 [[bin]]
-name = "prime-workbench"
+name = "workbench"
 path = "src/main.rs"
 
 # Test fixture: a scriptable agent that speaks the JSONL RPC protocol.
@@ -14,7 +14,7 @@ name = "fake-agent"
 path = "src/bin/fake-agent.rs"
 
 [lib]
-name = "prime_workbench_lib"
+name = "workbench_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

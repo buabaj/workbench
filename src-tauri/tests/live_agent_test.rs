@@ -5,13 +5,13 @@
 
 use std::time::Duration;
 
-use prime_workbench_lib::agent::child::TokioChild;
-use prime_workbench_lib::agent::dispatch::Dispatcher;
-use prime_workbench_lib::agent::spawn::{build_spawn_plan, EnvValue, SpawnContext};
-use prime_workbench_lib::creds::keychain::MemKeychain;
-use prime_workbench_lib::creds::store::{add, AddCredentialInput, AuthKind};
-use prime_workbench_lib::profiles::{upsert_agent_profile, AgentProfileInput};
-use prime_workbench_lib::secret::SecretString;
+use workbench_lib::agent::child::TokioChild;
+use workbench_lib::agent::dispatch::Dispatcher;
+use workbench_lib::agent::spawn::{build_spawn_plan, EnvValue, SpawnContext};
+use workbench_lib::creds::keychain::MemKeychain;
+use workbench_lib::creds::store::{add, AddCredentialInput, AuthKind};
+use workbench_lib::profiles::{upsert_agent_profile, AgentProfileInput};
+use workbench_lib::secret::SecretString;
 use serde_json::json;
 
 fn prime_agent_path() -> Option<std::path::PathBuf> {
@@ -46,7 +46,7 @@ async fn spawn_plan_launches_a_working_agent() {
     };
 
     let dir = tempfile::tempdir().unwrap();
-    let conn = prime_workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
+    let conn = workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
     let kc = MemKeychain::default();
 
     let cred = add(

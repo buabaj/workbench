@@ -1,9 +1,9 @@
 //! Voice pipeline integration: capture → resample → WAV, and the guarantee
 //! that captured audio never outlives the request.
 
-use prime_workbench_lib::appai::openrouter::{transcription_body, PrivacyMode};
-use prime_workbench_lib::voice::pcm;
-use prime_workbench_lib::voice::session::VoiceState;
+use workbench_lib::appai::openrouter::{transcription_body, PrivacyMode};
+use workbench_lib::voice::pcm;
+use workbench_lib::voice::session::VoiceState;
 
 fn speech_like(rate: u32, ms: u32) -> Vec<u8> {
     // Two tones mixed — enough structure to survive decimation and clear the
@@ -94,7 +94,7 @@ fn telemetry_table_cannot_hold_a_transcript() {
     // Structural guarantee: the schema has no content-bearing column, so a
     // transcript cannot be persisted even by mistake.
     let dir = tempfile::tempdir().unwrap();
-    let conn = prime_workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
+    let conn = workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
     let stmt = conn.prepare("SELECT * FROM appai_invocations LIMIT 0").unwrap();
     let columns: Vec<String> = stmt
         .column_names()

@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use prime_workbench_lib::vcs::{diff, restore, snapshot, VcsError};
+use workbench_lib::vcs::{diff, restore, snapshot, VcsError};
 
 struct Fixture {
     _dir: tempfile::TempDir,

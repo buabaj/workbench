@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    prime_workbench_lib::run()
+    workbench_lib::run()
 }

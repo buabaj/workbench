@@ -2,7 +2,7 @@
 //! framer output == input frames. This is the single highest-value test of the
 //! protocol layer.
 
-use prime_workbench_lib::agent::framer::{FrameEvent, LineFramer};
+use workbench_lib::agent::framer::{FrameEvent, LineFramer};
 use proptest::prelude::*;
 
 proptest! {

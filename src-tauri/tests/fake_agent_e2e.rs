@@ -2,9 +2,9 @@
 
 use std::time::Duration;
 
-use prime_workbench_lib::agent::child::TokioChild;
-use prime_workbench_lib::agent::dispatch::{DispatchError, Dispatcher, StreamItem};
-use prime_workbench_lib::agent::protocol::AgentEvent;
+use workbench_lib::agent::child::TokioChild;
+use workbench_lib::agent::dispatch::{DispatchError, Dispatcher, StreamItem};
+use workbench_lib::agent::protocol::AgentEvent;
 use serde_json::json;
 
 fn fake_agent_cmd() -> tokio::process::Command {

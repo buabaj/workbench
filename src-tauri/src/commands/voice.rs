@@ -42,11 +42,42 @@ pub struct VoiceCapability {
     pub credential_label: Option<String>,
 }
 
+/// Where a voice credential came from. Ambient keys (`.env`) mean the app can
+/// transcribe without ever asking — the user opted into that by dropping the
+/// key in a file.
+enum CredSource {
+    /// Keychain, via a configured capability profile.
+    Profile(String),
+    /// `.env` or the process environment.
+    Ambient,
+}
+
 struct VoiceProfile {
-    credential_id: String,
+    source: CredSource,
     model_ids: Vec<String>,
     privacy_mode: String,
     timeout_ms: u64,
+}
+
+/// A Finder-launched `.app` has cwd `/`, so the project `.env` is only findable
+/// via the workspace the user actually opened.
+fn last_workspace_root(state: &State<'_, AppState>) -> Option<std::path::PathBuf> {
+    let conn = state.db.lock().expect("db lock");
+    conn.query_row(
+        "SELECT root_real FROM workspaces ORDER BY last_opened_at DESC NULLS LAST LIMIT 1",
+        [],
+        |r| r.get::<_, String>(0),
+    )
+    .optional()
+    .ok()
+    .flatten()
+    .map(std::path::PathBuf::from)
+}
+
+fn default_models() -> Vec<String> {
+    registry::get("voice.transcription")
+        .map(|c| c.default_models.iter().map(|s| s.to_string()).collect())
+        .unwrap_or_default()
 }
 
 fn load_profile(state: &State<'_, AppState>) -> Result<VoiceProfile, AppError> {
@@ -67,18 +98,29 @@ fn load_profile(state: &State<'_, AppState>) -> Result<VoiceProfile, AppError> {
             },
         )
         .optional()?;
-    let (credential_id, models_json, privacy_mode, timeout_ms) = row.ok_or_else(|| {
-        AppError::from(AppAiError::NoCapabilityProfile("voice.transcription".into()))
-    })?;
-    let mut model_ids: Vec<String> =
-        serde_json::from_str(&models_json).unwrap_or_default();
+    let Some((credential_id, models_json, privacy_mode, timeout_ms)) = row else {
+        // No configured profile — fall back to an ambient key so internal AI
+        // capabilities work without a setup step.
+        drop(conn);
+        let root = last_workspace_root(state);
+        if crate::appai::dotenv::has_openrouter(root.as_deref()) {
+            return Ok(VoiceProfile {
+                source: CredSource::Ambient,
+                model_ids: default_models(),
+                privacy_mode: "strict".into(),
+                timeout_ms: 90_000,
+            });
+        }
+        return Err(AppError::from(AppAiError::NoCapabilityProfile(
+            "voice.transcription".into(),
+        )));
+    };
+    let mut model_ids: Vec<String> = serde_json::from_str(&models_json).unwrap_or_default();
     if model_ids.is_empty() {
-        model_ids = registry::get("voice.transcription")
-            .map(|c| c.default_models.iter().map(|s| s.to_string()).collect())
-            .unwrap_or_default();
+        model_ids = default_models();
     }
     Ok(VoiceProfile {
-        credential_id,
+        source: CredSource::Profile(credential_id),
         model_ids,
         privacy_mode,
         timeout_ms: timeout_ms as u64,
@@ -89,14 +131,18 @@ fn load_profile(state: &State<'_, AppState>) -> Result<VoiceProfile, AppError> {
 pub fn voice_capability(state: State<'_, AppState>) -> Result<VoiceCapability, AppError> {
     match load_profile(&state) {
         Ok(p) => {
-            let conn = state.db.lock().expect("db lock");
-            let label: Option<String> = conn
-                .query_row(
-                    "SELECT label FROM credential_profiles WHERE id = ?1",
-                    [&p.credential_id],
-                    |r| r.get(0),
-                )
-                .optional()?;
+            let label = match &p.source {
+                CredSource::Ambient => Some("ambient key (.env)".to_string()),
+                CredSource::Profile(id) => {
+                    let conn = state.db.lock().expect("db lock");
+                    conn.query_row(
+                        "SELECT label FROM credential_profiles WHERE id = ?1",
+                        [id],
+                        |r| r.get(0),
+                    )
+                    .optional()?
+                }
+            };
             Ok(VoiceCapability {
                 configured: true,
                 model_ids: p.model_ids,
@@ -156,11 +202,18 @@ pub async fn voice_finish(
     language: Option<String>,
 ) -> Result<openrouter::TranscriptResult, AppError> {
     let profile = load_profile(&state)?;
-    let key = state
-        .keychain
-        .get(&account_for(&profile.credential_id))
-        .map_err(|e| AppError::Internal(crate::secret::redact(&e.to_string())))?
-        .ok_or_else(|| AppError::from(AppAiError::NoCredential))?;
+    let key = match &profile.source {
+        CredSource::Ambient => {
+            let root = last_workspace_root(&state);
+            crate::appai::dotenv::lookup("OPENROUTER_API_KEY", root.as_deref())
+                .ok_or_else(|| AppError::from(AppAiError::NoCredential))?
+        }
+        CredSource::Profile(id) => state
+            .keychain
+            .get(&account_for(id))
+            .map_err(|e| AppError::Internal(crate::secret::redact(&e.to_string())))?
+            .ok_or_else(|| AppError::from(AppAiError::NoCredential))?,
+    };
 
     // Encode and DELETE the temp file before any network call.
     let (wav, _duration_ms) = voice.finish(&session_id)?;

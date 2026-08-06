@@ -1,19 +1,19 @@
 //! Negative security suite — the Phase 3 gate. Every assertion is a substring
 //! search for a sentinel that must never appear where a secret must not be.
 
-use prime_workbench_lib::agent::config_dir::IsolatedConfigDir;
-use prime_workbench_lib::agent::spawn::{build_spawn_plan, EnvValue, InjectionMode, SpawnContext};
-use prime_workbench_lib::creds::keychain::MemKeychain;
-use prime_workbench_lib::creds::store::{
+use workbench_lib::agent::config_dir::IsolatedConfigDir;
+use workbench_lib::agent::spawn::{build_spawn_plan, EnvValue, InjectionMode, SpawnContext};
+use workbench_lib::creds::keychain::MemKeychain;
+use workbench_lib::creds::store::{
     add, delete, list, reassign, replace_secret, usage, AddCredentialInput, AuthKind, CredError,
 };
-use prime_workbench_lib::profiles::{upsert_agent_profile, AgentProfileInput};
-use prime_workbench_lib::secret::SecretString;
+use workbench_lib::profiles::{upsert_agent_profile, AgentProfileInput};
+use workbench_lib::secret::SecretString;
 
 const SENTINEL: &str = "sk-WBTESTSENTINEL9f3a2c8e1bXYZ";
 
 fn open_file_db(dir: &std::path::Path) -> rusqlite::Connection {
-    prime_workbench_lib::db::open(&dir.join("test.db")).unwrap()
+    workbench_lib::db::open(&dir.join("test.db")).unwrap()
 }
 
 fn add_sentinel_cred(conn: &rusqlite::Connection, kc: &MemKeychain) -> String {

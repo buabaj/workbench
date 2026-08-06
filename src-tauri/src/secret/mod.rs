@@ -11,7 +11,7 @@
 //! ```compile_fail
 //! #[derive(serde::Serialize)]
 //! struct Leaky {
-//!     s: prime_workbench_lib::secret::SecretString, // must NOT compile
+//!     s: workbench_lib::secret::SecretString, // must NOT compile
 //! }
 //! ```
 

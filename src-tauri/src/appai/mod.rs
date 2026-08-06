@@ -2,6 +2,7 @@
 //! runtime: separate module tree, separate credential scope, separate HTTP
 //! client, separate error taxonomy. It never imports from `agent/`.
 
+pub mod dotenv;
 pub mod openrouter;
 pub mod registry;
 

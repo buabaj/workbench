@@ -1,7 +1,7 @@
 //! Link durability: anchors must survive edits and a restart (they are stored
 //! in SQLite and re-resolved from content, never from line numbers).
 
-use prime_workbench_lib::anchors::{self, resolve::resolve, AnchorStatus};
+use workbench_lib::anchors::{self, resolve::resolve, AnchorStatus};
 
 const RESEARCH: &str = "\
 # Anchor durability
@@ -66,7 +66,7 @@ fn anchor_state_round_trips_through_sqlite() {
     // What persistence actually stores: the fingerprint, not offsets. Reloading
     // it (as after an app restart) must resolve identically.
     let dir = tempfile::tempdir().unwrap();
-    let conn = prime_workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
+    let conn = workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
     conn.execute(
         "INSERT INTO workspaces (id, name, root_path, root_real, kind, created_at)
          VALUES ('ws', 'w', '/x', '/x', 'plain', 0)",
@@ -93,7 +93,7 @@ fn anchor_state_round_trips_through_sqlite() {
 
     // Reopen the database — the restart boundary.
     drop(conn);
-    let conn = prime_workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
+    let conn = workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
     let loaded = conn
         .query_row(
             "SELECT exact_text, prefix_text, suffix_text, hint_from, hint_to, file_hash_at_create
@@ -121,7 +121,7 @@ fn anchor_state_round_trips_through_sqlite() {
 #[test]
 fn link_rows_cascade_when_an_anchor_disappears() {
     let dir = tempfile::tempdir().unwrap();
-    let conn = prime_workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
+    let conn = workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
     conn.execute(
         "INSERT INTO workspaces (id, name, root_path, root_real, kind, created_at)
          VALUES ('ws','w','/x','/x','plain',0)",
@@ -155,7 +155,7 @@ fn link_rows_cascade_when_an_anchor_disappears() {
 #[test]
 fn duplicate_links_are_rejected() {
     let dir = tempfile::tempdir().unwrap();
-    let conn = prime_workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
+    let conn = workbench_lib::db::open(&dir.path().join("t.db")).unwrap();
     conn.execute(
         "INSERT INTO workspaces (id, name, root_path, root_real, kind, created_at)
          VALUES ('ws','w','/x','/x','plain',0)",
