@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Prime Workbench transcribes your dictation into the task composer. Audio is sent only to the provider you configure, and the recording is deleted immediately.</string>
+    <string>Workbench transcribes your dictation into the task composer. Audio is sent only to the provider you configure, and the recording is deleted immediately.</string>
 </dict>
 </plist>

@@ -34,15 +34,15 @@ function ConflictBanner({ workspaceId, relPath }: { workspaceId: string; relPath
         gap: 10,
         alignItems: "center",
         padding: "8px 16px",
-        borderBottom: "1px solid var(--structure-strong)",
-        background: "var(--surface-raised)",
-        fontSize: 11,
+        borderBottom: "1px solid var(--border)",
+        background: "var(--raised)",
+        fontSize: "var(--text-sm)",
       }}
     >
-      <span aria-hidden style={{ color: "var(--danger)" }}>
+      <span aria-hidden style={{ color: "var(--error)" }}>
         ⚠
       </span>
-      <span style={{ color: "var(--ink-muted)" }}>
+      <span style={{ color: "var(--ink-secondary)" }}>
         Changed on disk while you had unsaved edits.
       </span>
       <button className="btn" onClick={takeTheirs}>
@@ -85,8 +85,8 @@ function Tabs() {
       style={{
         display: "flex",
         gap: 2,
-        padding: "6px 12px 0",
-        borderBottom: "1px solid var(--structure)",
+        padding: "var(--s-2) var(--s-3)",
+        borderBottom: "1px solid var(--border)",
         overflowX: "auto",
         flexShrink: 0,
       }}
@@ -115,18 +115,19 @@ function Tabs() {
               display: "flex",
               gap: 7,
               alignItems: "center",
-              padding: "5px 10px",
-              fontSize: 11,
+              padding: "5px 12px",
+              fontSize: "var(--text-sm)",
+              fontWeight: t === active ? 500 : 400,
               color: t === active ? "var(--ink)" : "var(--ink-muted)",
-              background: t === active ? "var(--surface-raised)" : "transparent",
-              borderRadius: "var(--r) var(--r) 0 0",
-              borderBottom: t === active ? "2px solid var(--accent)" : "2px solid transparent",
+              background: t === active ? "var(--canvas)" : "transparent",
+              border: `1px solid ${t === active ? "var(--border)" : "transparent"}`,
+              borderRadius: "var(--r-control)",
               whiteSpace: "nowrap",
             }}
           >
             {name}
             {phase === "dirty" && (
-              <span aria-hidden style={{ color: "var(--accent)", fontSize: 9 }}>
+              <span aria-hidden style={{ color: "var(--clay-text)", fontSize: 9 }}>
                 ●
               </span>
             )}
@@ -164,7 +165,7 @@ function Editor({ workspaceId, relPath }: { workspaceId: string; relPath: string
       {phase === "dirty" && (
         <button
           className="btn"
-          style={{ position: "absolute", right: 14, bottom: 12, fontSize: 10 }}
+          style={{ position: "absolute", right: 16, bottom: 16, fontSize: "var(--text-xs)", boxShadow: "var(--lift)", background: "var(--canvas)" }}
           onClick={() => {
             const v = viewRef.current;
             if (v) void saveBuffer(relPath, () => v.state.doc.toString());

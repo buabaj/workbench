@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
           alignItems: "flex-start",
         }}
       >
-        <div style={{ color: "var(--danger)" }}>Something in the interface failed to render.</div>
+        <div style={{ color: "var(--error)" }}>Something in the interface failed to render.</div>
         <div style={{ fontSize: 10, userSelect: "text" }}>{this.state.error.message}</div>
         <button className="btn" onClick={() => this.setState({ error: null })}>
           Try again

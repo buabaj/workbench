@@ -1,4 +1,5 @@
 import { useWorkspace } from "../store/workspace";
+import { FileIcon, FolderIcon } from "../icons/fileIcon";
 import type { TreeNode } from "../ipc/client";
 
 function Row({ node, depth }: { node: TreeNode; depth: number }) {
@@ -8,7 +9,7 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
   const toggleDir = useWorkspace((s) => s.toggleDir);
   const openFile = useWorkspace((s) => s.openFile);
 
-  const indent = { paddingLeft: `${16 + depth * 14}px` };
+  const indent = { paddingLeft: `${8 + depth * 12}px` };
   const activate = () => (node.isDir ? toggleDir(node.relPath) : openFile(node.relPath));
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -34,10 +35,11 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
           onClick={activate}
           onKeyDown={onKeyDown}
         >
-          <span aria-hidden style={{ fontSize: 9, color: "var(--ink-faint)" }}>
+          <span className="twisty" aria-hidden>
             {expanded ? "▾" : "▸"}
           </span>
-          {node.name}
+          <FolderIcon open={expanded} />
+          <span className="label">{node.name}</span>
         </div>
         {expanded && <Children subpath={node.relPath} depth={depth + 1} />}
       </>
@@ -58,14 +60,16 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
       onClick={activate}
       onKeyDown={onKeyDown}
     >
-      {node.name}
+      <span className="twisty" aria-hidden />
+      <FileIcon name={node.name} />
+      <span className="label">{node.name}</span>
       {phase === "dirty" && (
-        <span className="count" aria-hidden>
+        <span className="count" style={{ color: "var(--clay-text)" }} aria-hidden>
           ●
         </span>
       )}
       {phase === "conflict" && (
-        <span className="count" style={{ color: "var(--danger)" }} aria-hidden>
+        <span className="count" style={{ color: "var(--error)" }} aria-hidden>
           ⚠
         </span>
       )}
@@ -77,22 +81,14 @@ function Children({ subpath, depth }: { subpath: string; depth: number }) {
   const nodes = useWorkspace((s) => s.childrenByPath[subpath]);
   if (!nodes) {
     return (
-      <div
-        className="rail-item"
-        style={{ paddingLeft: `${16 + depth * 14}px`, color: "var(--ink-faint)" }}
-        role="treeitem"
-        aria-busy="true"
-      >
+      <div className="rail-item" style={{ paddingLeft: `${8 + depth * 12}px`, color: "var(--ink-faint)" }} aria-busy="true">
         loading…
       </div>
     );
   }
   if (nodes.length === 0) {
     return (
-      <div
-        className="rail-item"
-        style={{ paddingLeft: `${16 + depth * 14}px`, color: "var(--ink-faint)" }}
-      >
+      <div className="rail-item" style={{ paddingLeft: `${8 + depth * 12}px`, color: "var(--ink-faint)" }}>
         empty
       </div>
     );

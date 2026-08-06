@@ -1,69 +1,171 @@
-/* Prime Workbench — locked design tokens. Ground truth: design/DESIGN.md (Amber). */
+/* Workbench design tokens.
+ *
+ * Ground truth: design/DESIGN.md. Palette, radii, spacing and motion values are
+ * read from Anthropic's live production CSS (anthropic.com + claude.com), not
+ * from secondhand write-ups — most of those still document the retired
+ * Copernicus/Styrene era and invent hexes that appear nowhere.
+ *
+ * Two rules that carry most of the character:
+ *   1. No neutral gray exists. Every "gray" carries yellow-green warmth, and
+ *      "black" is #141413, never #000.
+ *   2. Depth comes from hairline borders and warm surface steps, not shadows.
+ */
 
 @font-face {
-  font-family: "Source Serif 4";
-  src: url("../assets/fonts/SourceSerif4Variable-Roman.ttf") format("truetype-variations");
-  font-weight: 200 900;
+  font-family: "Fraunces";
+  src: url("../assets/fonts/Fraunces-Variable.ttf") format("truetype-variations");
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Source Serif 4";
-  src: url("../assets/fonts/SourceSerif4Variable-Italic.ttf") format("truetype-variations");
-  font-weight: 200 900;
+  font-family: "Fraunces";
+  src: url("../assets/fonts/Fraunces-Italic-Variable.ttf") format("truetype-variations");
+  font-weight: 100 900;
   font-style: italic;
   font-display: swap;
 }
 @font-face {
-  font-family: "JetBrains Mono";
-  src: url("../assets/fonts/JetBrainsMono-Variable.ttf") format("truetype-variations");
-  font-weight: 100 800;
+  font-family: "Inter";
+  src: url("../assets/fonts/Inter-Variable.ttf") format("truetype-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/Inter-Italic-Variable.ttf") format("truetype-variations");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Commit Mono";
+  src: url("../assets/fonts/CommitMono-Variable.ttf") format("truetype-variations");
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
 
 :root {
-  /* surfaces */
-  --canvas: #0f1012;
-  --surface: #151619;
-  --surface-raised: #1b1d21;
+  /* ── surfaces: warm ivory ─────────────────────────────────────────────── */
+  --canvas: #faf9f5;        /* ivory-light  — the window */
+  --surface: #f0eee6;       /* ivory-medium — rails, panels */
+  --raised: #e8e6dc;        /* ivory-dark   — hover, selected */
+  --oat: #e3dacc;           /* deepest warm step */
 
-  /* ink — warm paper, never pure white */
-  --ink: #e4dfd3;
-  --ink-muted: #9a968b;
-  /* Lightened from #5C5A54 (2.76:1 — below even the 3.0 non-text floor).
-     This token labels real text, so it now clears 4.5:1 on ALL three
-     surfaces, raised included. Hue and saturation preserved. */
-  --ink-faint: #88857d;
+  /* ── ink: warm near-black, never #000 ─────────────────────────────────── */
+  --ink: #141413;           /* slate-dark   */
+  --ink-secondary: #3d3d3a; /* slate-medium */
+  --ink-muted: #5e5d59;     /* slate-light  */
+  /* Darkened from cloud-dark #87867f (2.92:1) — this token labels real text. */
+  --ink-faint: #676661;
 
-  /* structure — cool gray */
-  --structure: #2a2c31;
-  --structure-strong: #3d4048;
+  /* ── accent: clay. One warm accent, deliberately not the cold blue/violet
+        every other AI product uses. ───────────────────────────────────────── */
+  --clay: #d97757;          /* FILLS, dots, borders, washes — not text */
+  --clay-hover: #c6613f;
+  --clay-wash: #d977571f;   /* 12% — selection, active row tint */
+  /* Clay on ivory is 2.5:1, so clay TEXT needs its own darker value. Two
+     related rules, both load-bearing:
+       · clay-coloured text  → --clay-text
+       · text on a clay fill → --ink (ivory on clay is only 2.96:1, which is
+         exactly why Anthropic's primary button is ink-filled, not clay) */
+  --clay-text: #ab4727;
 
-  /* accent — pale amber (acid-green permanently vetoed) */
-  --accent: #d9a441;
-  --accent-dim: #8a6a2e;
-  --accent-ink: #141005;
+  /* ── functional ───────────────────────────────────────────────────────── */
+  --border: #1414131a;      /* 10% ink — hairlines do the separating */
+  --border-strong: #14141333;
+  --focus: #2c84db;
+  /* Darkened from Anthropic's #bf4d43 / #2d8a4e: both carry error and diff
+     TEXT here, so they clear 4.5:1 on every surface rather than only reading
+     as marks. */
+  --error: #ad443b;
+  --diff-add: #267442;
+  --diff-add-wash: #2d8a4e14;
+  --diff-del: #ad443b;
+  --diff-del-wash: #bf4d4314;
 
-  /* semantic */
-  --link: #7fb2be;
-  /* Lightened from #C0503C (3.84:1 on surface) — danger carries error text
-     and the conflict banner sits on --surface-raised, so it must clear
-     4.5:1 there too. Hue and saturation preserved. */
-  --danger: #cb6957; /* destructive/error ONLY */
+  /* ── secondary palette: named as materials, not numbers ───────────────── */
+  --sky: #6a9bcc;
+  --olive: #788c5d;
+  --fig: #c46686;
+  --kraft: #d4a27f;
+  --manilla: #ebdbbc;
+  --heather: #cbcadb;
+  --cactus: #bcd1ca;
 
-  /* type */
-  --serif: "Source Serif 4", Georgia, serif;
-  --mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  /* ── type ─────────────────────────────────────────────────────────────── */
+  --serif: "Fraunces", Georgia, serif;
+  --sans: "Inter", system-ui, -apple-system, sans-serif;
+  --mono: "Commit Mono", ui-monospace, "SF Mono", monospace;
 
-  /* shape */
-  --r: 3px;
+  /* Fraunces axes: softer terminals and a touch of wonk read as warm rather
+     than institutional. */
+  --serif-settings: "SOFT" 30, "WONK" 1;
 
-  /* layout constants (comp A) */
+  --text-xs: 0.75rem;    /* 12px  — micro labels */
+  --text-sm: 0.8125rem;  /* 13px  — chrome, metadata */
+  --text-base: 0.875rem; /* 14px  — UI body (matches their app shell) */
+  --text-md: 1rem;       /* 16px  */
+  --text-lg: 1.125rem;   /* 18px  */
+  --prose: 1.25rem;      /* 20px  — reading text. The loudest signal. */
+  --display-sm: 1.5rem;
+  --display: 2rem;
+  --display-lg: 3rem;
+
+  --lh-tight: 1.1;
+  --lh-snug: 1.3;
+  --lh-body: 1.4;
+  --lh-prose: 1.6;
+
+  --track-tight: -0.02em;
+  --track-snug: -0.005em;
+  --track-none: 0em;
+
+  /* measure */
+  --w-body: 60ch;
+  --w-prose: 80ch;
+  --w-chat: 728px;         /* their app-shell chat column */
+
+  /* ── radius: the single biggest correction. Anthropic has no 3px anywhere.
+        window 20 / sidebar 14 / card 16 / input 10 / control 8 / chip 6 ──── */
+  --r-window: 20px;
+  --r-panel: 14px;
+  --r-card: 16px;
+  --r-input: 10px;
+  --r-control: 8px;
+  --r-chip: 6px;
+  --r-pill: 999px;
+
+  /* ── spacing: plain 4px ladder, generous at the top ───────────────────── */
+  --s-1: 4px;   --s-2: 8px;   --s-3: 12px;  --s-4: 16px;
+  --s-5: 20px;  --s-6: 24px;  --s-8: 32px;  --s-10: 40px;
+  --s-12: 48px; --s-16: 64px;
+
+  /* ── elevation: hairline ring + one very soft shadow. Never a hard drop. */
+  --lift: 0 0 0 1px #0a0a0a0f, 0 4px 24px #0a0a0a0a;
+  --lift-strong: 0 0 0 1px #0a0a0a14, 0 8px 40px #0a0a0a14;
+
+  /* ── motion ───────────────────────────────────────────────────────────── */
+  --dur-fast: 60ms;
+  --dur: 200ms;
+  --dur-slow: 450ms;
+  --ease: cubic-bezier(0.165, 0.84, 0.44, 1);
+  --ease-snap: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ── layout ───────────────────────────────────────────────────────────── */
   --bar-h: 44px;
-  --rail-w: 232px;
+  --rail-w: 248px;
   --inspector-w: 300px;
-  --composer-h: 88px;
-  --doc-measure: 660px;
   --traffic-inset: 84px;
+
+  /* ── syntax: Anthropic's real values — rust and amber, not blue/purple ── */
+  --syn-keyword: #b3402a;
+  --syn-string: #9c4a21;
+  --syn-number: #8c5d00;
+  --syn-function: #6f42c1;
+  --syn-comment: #62676d;   /* darkened from #6e7781 (4.32:1) so comments read */
+  --syn-type: #953800;
+  --syn-punct: #5e5d59;
 }

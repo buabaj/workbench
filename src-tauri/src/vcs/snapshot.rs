@@ -142,7 +142,7 @@ pub fn snapshot(
     let tree_oid = write_tree(odb, &entries)?;
     let tree = odb.find_tree(tree_oid)?;
     let sig = Signature::new(
-        "Prime Workbench",
+        "Workbench",
         "workbench@localhost",
         &Time::new(crate::db::now_ms() / 1000, 0),
     )?;

@@ -25,8 +25,8 @@ export function AgentActivity() {
   return (
     <div
       style={{
-        border: "1px solid var(--structure-strong)",
-        borderRadius: "var(--r)",
+        border: "1px solid var(--border-strong)",
+        borderRadius: "var(--r-card)",
         background: "var(--surface)",
         padding: 12,
       }}
@@ -41,7 +41,7 @@ export function AgentActivity() {
             className="state-label"
             role="status"
             aria-live="polite"
-            style={status === "failed" ? { color: "var(--danger)" } : undefined}
+            style={status === "failed" ? { color: "var(--error)" } : undefined}
           >
             {label}
           </div>
@@ -66,7 +66,7 @@ export function AgentActivity() {
             gap: 8,
             fontSize: 11,
             padding: "5px 0",
-            borderTop: "1px solid var(--structure)",
+            borderTop: "1px solid var(--border)",
             color: "var(--ink-muted)",
           }}
         >
@@ -78,9 +78,9 @@ export function AgentActivity() {
             style={{
               color:
                 row.status === "ok"
-                  ? "var(--accent)"
+                  ? "var(--clay)"
                   : row.status === "error"
-                    ? "var(--danger)"
+                    ? "var(--error)"
                     : "var(--ink-faint)",
             }}
           >
@@ -97,7 +97,7 @@ export function AgentActivity() {
           style={{
             marginTop: 10,
             paddingTop: 10,
-            borderTop: "1px solid var(--structure)",
+            borderTop: "1px solid var(--border)",
             fontFamily: "var(--serif)",
             fontSize: 13.5,
             lineHeight: 1.55,
@@ -118,7 +118,7 @@ export function AgentActivity() {
           style={{
             marginTop: 10,
             fontSize: 11,
-            color: "var(--danger)",
+            color: "var(--error)",
             userSelect: "text",
           }}
         >

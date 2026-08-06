@@ -29,8 +29,8 @@ function PatchView({ taskId, relPath }: { taskId: string; relPath: string }) {
         fontSize: 10.5,
         lineHeight: 1.5,
         background: "var(--canvas)",
-        border: "1px solid var(--structure)",
-        borderRadius: "var(--r)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--r-card)",
         padding: "8px 10px",
         margin: "6px 0 0",
         maxHeight: 220,
@@ -43,9 +43,9 @@ function PatchView({ taskId, relPath }: { taskId: string; relPath: string }) {
           key={i}
           style={{
             color: line.startsWith("+")
-              ? "var(--accent)"
+              ? "var(--clay)"
               : line.startsWith("-")
-                ? "var(--danger)"
+                ? "var(--error)"
                 : "var(--ink-muted)",
             whiteSpace: "pre-wrap",
           }}
@@ -72,13 +72,13 @@ function FileRow({
   const overlapping = file.attribution === "both";
 
   return (
-    <div style={{ borderTop: "1px solid var(--structure)", padding: "7px 0" }}>
+    <div style={{ borderTop: "1px solid var(--border)", padding: "7px 0" }}>
       <div style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 11 }}>
         <input
           type="checkbox"
           checked={checked}
           onChange={onToggle}
-          style={{ accentColor: "var(--accent)" }}
+          style={{ accentColor: "var(--clay)" }}
           title="Select for restore"
         />
         <span
@@ -100,8 +100,8 @@ function FileRow({
         </span>
         {!file.isBinary && (
           <span style={{ fontSize: 10 }}>
-            <span style={{ color: "var(--accent)" }}>+{file.insertions}</span>{" "}
-            <span style={{ color: "var(--danger)" }}>−{file.deletions}</span>
+            <span style={{ color: "var(--clay-text)" }}>+{file.insertions}</span>{" "}
+            <span style={{ color: "var(--error)" }}>−{file.deletions}</span>
           </span>
         )}
       </div>

@@ -8,7 +8,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import {
   bracketMatching,
-  defaultHighlightStyle,
+  HighlightStyle,
   indentOnInput,
   syntaxHighlighting,
 } from "@codemirror/language";
@@ -25,64 +25,110 @@ import {
   lineNumbers,
   rectangularSelection,
 } from "@codemirror/view";
+import { tags as t } from "@lezer/highlight";
 
 export const languageCompartment = new Compartment();
 
-/** Theme driven entirely by the locked CSS custom properties. */
+/**
+ * Syntax palette taken from Anthropic's own app-shell CSS: rust keywords and
+ * burnt-amber strings rather than the usual blue/purple. It sits inside the
+ * warm ivory surface instead of fighting it.
+ */
+const workbenchHighlight = HighlightStyle.define([
+  { tag: [t.keyword, t.moduleKeyword, t.controlKeyword], color: "var(--syn-keyword)" },
+  { tag: [t.string, t.special(t.string), t.regexp], color: "var(--syn-string)" },
+  { tag: [t.number, t.bool, t.null], color: "var(--syn-number)" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "var(--syn-function)" },
+  { tag: [t.comment, t.lineComment, t.blockComment], color: "var(--syn-comment)", fontStyle: "italic" },
+  { tag: [t.typeName, t.className, t.namespace], color: "var(--syn-type)" },
+  { tag: [t.propertyName, t.attributeName], color: "var(--ink-secondary)" },
+  { tag: [t.operator, t.punctuation, t.separator, t.bracket], color: "var(--syn-punct)" },
+  { tag: [t.variableName, t.definition(t.variableName)], color: "var(--ink)" },
+  { tag: t.invalid, color: "var(--error)" },
+  // Markdown
+  { tag: t.heading, color: "var(--ink)", fontWeight: "600" },
+  { tag: t.strong, fontWeight: "600" },
+  { tag: t.emphasis, fontStyle: "italic" },
+  { tag: t.link, color: "var(--sky)", textDecoration: "underline" },
+  { tag: t.monospace, color: "var(--syn-string)" },
+  { tag: t.quote, color: "var(--ink-muted)", fontStyle: "italic" },
+]);
+
 const workbenchTheme = EditorView.theme(
   {
     "&": {
-      backgroundColor: "var(--surface)",
+      backgroundColor: "var(--canvas)",
       color: "var(--ink)",
       height: "100%",
-      fontSize: "13px",
+      fontSize: "13.5px",
     },
     ".cm-content": {
-      caretColor: "var(--accent)",
+      caretColor: "var(--clay)",
       fontFamily: "var(--mono)",
-      padding: "16px 0",
+      padding: "var(--s-4) 0",
+      lineHeight: "1.6",
     },
     "&.cm-focused": { outline: "none" },
-    ".cm-cursor": { borderLeftColor: "var(--accent)" },
-    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-      backgroundColor: "color-mix(in srgb, var(--accent) 18%, transparent)",
+    ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--clay)", borderLeftWidth: "2px" },
+    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
+      backgroundColor: "var(--clay-wash)",
     },
     ".cm-gutters": {
-      backgroundColor: "var(--surface)",
+      backgroundColor: "var(--canvas)",
       color: "var(--ink-faint)",
       border: "none",
       fontFamily: "var(--mono)",
-      fontSize: "11px",
+      fontSize: "11.5px",
+      paddingRight: "var(--s-2)",
     },
-    ".cm-activeLineGutter": {
-      backgroundColor: "var(--surface-raised)",
-      color: "var(--ink-muted)",
-    },
+    ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--ink-muted)" },
     ".cm-searchMatch": {
-      backgroundColor: "color-mix(in srgb, var(--accent) 25%, transparent)",
+      backgroundColor: "var(--clay-wash)",
+      borderRadius: "3px",
+      outline: "1px solid var(--clay)",
     },
-    ".cm-selectionMatch": {
-      backgroundColor: "color-mix(in srgb, var(--link) 15%, transparent)",
+    ".cm-selectionMatch": { backgroundColor: "#6a9bcc1f", borderRadius: "3px" },
+    ".cm-panels": {
+      backgroundColor: "var(--surface)",
+      color: "var(--ink)",
+      borderTop: "1px solid var(--border)",
+    },
+    ".cm-tooltip": {
+      backgroundColor: "var(--canvas)",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--r-control)",
+      boxShadow: "var(--lift)",
+      overflow: "hidden",
+    },
+    ".cm-tooltip-autocomplete ul li[aria-selected]": {
+      backgroundColor: "var(--clay-wash)",
+      color: "var(--ink)",
     },
   },
-  { dark: true },
+  { dark: false },
 );
 
-/** Research mode: prose in Source Serif 4, comfortable measure. */
+/**
+ * Reading mode. Body prose in Fraunces at 20px is the loudest signal that this
+ * is a place to read and write, not a terminal — it's the one choice that most
+ * separates Anthropic's register from a generic dev tool.
+ */
 const proseTheme = EditorView.theme(
   {
     ".cm-content": {
       fontFamily: "var(--serif)",
-      fontSize: "16.5px",
-      lineHeight: "1.65",
-      maxWidth: "660px",
+      fontVariationSettings: "'SOFT' 30, 'WONK' 1",
+      fontSize: "var(--prose)",
+      lineHeight: "var(--lh-prose)",
+      maxWidth: "var(--w-prose)",
       margin: "0 auto",
-      padding: "40px 24px 120px",
+      padding: "var(--s-10) var(--s-6) var(--s-16)",
+      letterSpacing: "var(--track-snug)",
     },
     ".cm-line": { padding: "0" },
     ".cm-gutters": { display: "none" },
   },
-  { dark: true },
+  { dark: false },
 );
 
 const base: Extension = [
@@ -97,7 +143,7 @@ const base: Extension = [
   rectangularSelection(),
   crosshairCursor(),
   highlightSelectionMatches(),
-  syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+  syntaxHighlighting(workbenchHighlight, { fallback: true }),
   keymap.of([
     ...closeBracketsKeymap,
     ...defaultKeymap,
@@ -113,7 +159,7 @@ export function codeExtensions(): Extension {
   return [base, lineNumbers(), highlightActiveLineGutter(), languageCompartment.of([])];
 }
 
-export function researchExtensions(): Extension {
+export function proseExtensions(): Extension {
   return [
     base,
     proseTheme,
@@ -122,7 +168,7 @@ export function researchExtensions(): Extension {
   ];
 }
 
-export function isResearchFile(relPath: string): boolean {
+export function isMarkdown(relPath: string): boolean {
   const lower = relPath.toLowerCase();
   return lower.endsWith(".md") || lower.endsWith(".markdown");
 }

@@ -1,129 +1,112 @@
-# Prime Workbench — Design Foundation (LOCKED 2026-08-06)
+# Workbench — Design Foundation
 
-Direction: **Dark Research Instrument — Amber.** Paper-like editorial structure rendered in
-dark mode. Restrained industrial chrome. Typography does the hierarchy; borders and spacing do
-the structure; luminance does the depth. No glass, no gradients, no decoration without
-information.
+Direction: **what Anthropic would build.** Warm ivory paper, one clay accent,
+generous roundness, serif for reading. An AI development environment that feels
+like considered stationery rather than a terminal utility.
 
-Ground truth: comp `design/comps/amber.html` (Comp A). The other two comps (`signal.html`,
-`ice.html`) are kept as rejected alternatives for reference.
+Ground truth for values: **Anthropic's live production CSS** (anthropic.com and
+claude.com), read directly. Most third-party "Anthropic design system" write-ups
+document the retired Copernicus/Styrene era and invent hexes that appear nowhere
+in their actual stylesheets — don't trust them.
 
-## Hard rules
+Implementation: `src/styles/tokens.css` is the single source; `design/contrast-audit.py`
+enforces the accessibility floor. **Run the audit after any palette change.**
 
-- **Never acid-green / acid-lime.** Vetoed outright by Jerry.
-- Red (`--danger`) is reserved exclusively for destructive/error states.
-- Source Serif 4 is for research prose only. Everything system — labels, code, metadata,
-  chrome — is JetBrains Mono.
-- Motion only when it communicates real agent state; always paired with a text label and a
-  non-color indicator; `prefers-reduced-motion` fully respected.
-- Anti-patterns: AI gradients, oversized hero typography, decorative pill saturation, fake
-  terminal styling, unnecessary card nesting, motion without meaning.
+## Non-negotiables
 
-## Locked tokens
+1. **No neutral gray exists.** Every "gray" carries yellow-green warmth; "black"
+   is `#141413`, never `#000`. Cold neutrals are the fastest way to look generic.
+2. **Depth is hairlines and warm surface steps, never shadows.** One soft lift
+   (`--lift`) exists for floating surfaces; there are no hard drop shadows.
+3. **No 3px corners.** Anthropic has none anywhere. Radius ladder below.
+4. **Body prose is serif at 20px.** The loudest signal that this is a place to
+   read and write. Most AI tools set everything in a UI sans; that's the tell.
+5. **Buttons invert, they don't lift.** Outline → solid on hover.
+6. **One accent.** Clay. Never a second competing hue for interaction.
+
+## Palette
 
 ```css
-:root {
-  /* surfaces */
-  --canvas:         #0F1012;   /* window background, near-black graphite */
-  --surface:        #151619;   /* panel background — the center canvas uses this */
-  --surface-raised: #1B1D21;   /* active/hover surfaces */
-
-  /* ink — warm paper, never pure white */
-  --ink:            #E4DFD3;
-  --ink-muted:      #9A968B;
-  --ink-faint:      #88857D;   /* was #5C5A54 — see contrast note below */
-
-  /* structure — cool gray */
-  --structure:        #2A2C31;
-  --structure-strong: #3D4048;
-
-  /* accent — pale amber */
-  --accent:      #D9A441;
-  --accent-dim:  #8A6A2E;   /* anchor rules, quiet accent borders */
-  --accent-ink:  #141005;   /* text on accent fills */
-
-  /* semantic */
-  --link:   #7FB2BE;        /* muted cyan — links, cross-mode references */
-  --danger: #CB6957;        /* destructive/error ONLY — was #C0503C */
-
-  /* type */
-  --serif: "Source Serif 4", Georgia, serif;
-  --mono:  "JetBrains Mono", ui-monospace, monospace;
-
-  /* shape */
-  --r: 3px;
-}
+--canvas #faf9f5   --surface #f0eee6   --raised #e8e6dc   --oat #e3dacc
+--ink #141413      --ink-secondary #3d3d3a
+--ink-muted #5e5d59  --ink-faint #676661
+--clay #d97757     --clay-hover #c6613f  --clay-wash #d977571f  --clay-text #ab4727
+--border #1414131a --border-strong #14141333
+--focus #2c84db    --error #ad443b     --diff-add #267442
 ```
 
-### Contrast (audited 2026-08-06, enforced)
+Secondary, named as materials rather than numbers — the naming *is* the
+philosophy: `--sky --olive --fig --kraft --manilla --heather --cactus`.
 
-Every token that carries text clears **WCAG AA 4.5:1 against all three
-surfaces** (`--canvas`, `--surface`, `--surface-raised`):
+### The clay rule (load-bearing)
 
-| token | min ratio |
-|---|---|
-| `--ink` | 12.69 |
-| `--ink-muted` | 5.71 |
-| `--ink-faint` | 4.58 |
-| `--accent` | 7.50 |
-| `--link` | 7.24 |
-| `--danger` | 4.58 |
+Clay on ivory is **2.5:1**. So:
+- **clay-coloured text → `--clay-text`** (`#ab4727`, 4.58:1)
+- **text on a clay fill → `--ink`** — ivory on clay is only 2.96:1, which is
+  exactly why Anthropic's primary button is ink-filled, not clay-filled.
+- `--clay` itself is for **fills, dots, borders and washes only.**
 
-Two originals failed and were lightened with hue and saturation preserved:
-`--ink-faint` was #5C5A54 (2.76:1 — below even the 3.0 non-text floor, and it
-labels real text), and `--danger` was #C0503C (3.84:1 on surface; it carries
-error copy and the conflict banner sits on `--surface-raised`). Re-run the audit
-if any surface or text token changes.
+### Contrast (audited, enforced)
 
-Both fonts are OFL — **vendor them into the app** (`@font-face` from packaged assets; the CSP
-forbids external fonts). Weights needed: Source Serif 4 — 400, 600, 400-italic (optical size
-axis 8..60); JetBrains Mono — 400, 500, 600.
+Every text token clears **4.5:1 on canvas, surface AND raised**. Four Anthropic
+values were darkened to get there, hue and saturation preserved: `--ink-faint`
+(was `#87867f`, 2.92:1), `--error` (`#bf4d43`), `--diff-add` (`#2d8a4e`), and
+three syntax colours. `--clay` is exempt as a non-text mark colour.
 
-## Type & density (from Comp A)
+```
+ink 14.73 · ink-secondary 8.71 · ink-muted 5.27 · ink-faint 4.60
+clay-text 4.58 · error 4.58 · diff-add 4.59 · all syntax ≥ 4.5
+```
 
-- Chrome/system base: 12.5px JetBrains Mono. Micro-labels: 10px, weight 500,
-  letter-spacing .14em, `--ink-faint`, uppercase.
-- Research prose: 16.5px/1.65 Source Serif 4, measure ~660px, headings 600.
-  H1 29px, H2 19px. Doc metadata row: 11px mono, hairline bottom border.
-- Code blocks in prose: 12px mono on `--canvas`, 1px `--structure` border, radius `--r`.
-- Density: editorial/roomy — rail items 4px vertical padding, panels 16px padding,
-  sections separated by 20–22px.
-- Mixed-case labels in chrome; uppercase reserved for section micro-labels only.
+## Type
 
-## Component primitives (from Comp A)
-
-- **Active/selected state**: `--surface-raised` fill + `inset 2px 0 0 var(--accent)` left rule.
-  Never an accent fill for selection.
-- **Panels**: 1px `--structure` border, radius `--r`, `--surface` fill. Emphasized panels
-  (live agent) use `--structure-strong`. No shadows, no nesting.
-- **Chips**: 1px border, radius `--r`, mono 11px. Origin/provenance chips use dashed border +
-  `--ink-faint` (e.g. "workspace default").
-- **Anchored claim blocks** (research): 2px `--accent-dim` left rule, anchor tag line in 10px
-  mono `--accent` with `⌁` glyph.
-- **Wikilinks / cross-refs**: `--link` with dotted underline.
-- **Primary action**: `--accent` fill, `--accent-ink` text, weight 600. One per region, max.
-- **Typed-link rows**: kind in 10px uppercase `--accent`, target in `--link`, hairline
-  separators.
-
-## Dot-matrix state language
-
-7×5 dot grid, 4px dots, 3px gap, circular. Dots are `--structure-strong` at rest, `--accent`
-when active. States:
-
-| State | Pattern | Motion |
+| Role | Face | Notes |
 |---|---|---|
-| awaiting-input | four corners lit | none |
-| thinking | center column lit | slow column sweep, ~2s |
-| running-tools | rows 1/3/5 lit | staggered row pulse, 1.1s (comp A's `rowpulse`) |
-| complete | full grid lit | none |
-| failed | X shape, `--danger` | none |
+| Reading prose | **Fraunces** | `SOFT 30, WONK 1` — softer terminals read warm, not institutional |
+| UI / chrome | **Inter** | `cv05`, `ss03` for a friendlier l and g |
+| Code | **Commit Mono** | deliberately anonymous so it doesn't fight the prose |
 
-Reduced motion: static characteristic pattern per state. The adjacent text label
-(`RUNNING TOOLS`, `THINKING`, …, 11px, letter-spacing .1em, `--accent`) is always present —
-dots reinforce, never solely carry, the state.
+All three vendored as variable fonts under OFL in `src/assets/fonts/` — the CSP
+forbids external font loads, and Anthropic's own faces are unlicensable.
 
-## Layout constants (from Comp A)
+Scale: `--text-xs 12` · `--text-sm 13` · `--text-base 14` (UI body, matches their
+app shell) · `--text-md 16` · `--prose 20` · display 24/32/48.
+Tracking only `0 / -0.005em / -0.02em`. Measure: body 60ch, prose 80ch, chat 728px.
 
-Command bar 44px (traffic-light inset ~84px left padding, `titleBarStyle: Overlay`).
-Left rail 232px. Right inspector 300px. Composer 88px. Center canvas fluid, doc measure 660px
-centered. Region separators: 1px `--structure`, no gaps, no gutters between regions.
+## Radius
+
+```
+window 20 · panel 14 · card 16 · input 10 · control 8 · chip 6 · pill 999
+```
+
+## Motion
+
+`60ms / 200ms / 450ms`, `cubic-bezier(.165,.84,.44,1)`. Affordances fade in on
+hover; nothing pops. `prefers-reduced-motion` is handled globally in `app.css`
+so anything added later is covered by default.
+
+## Syntax
+
+Rust and amber rather than the usual blue/purple, so code sits *inside* the warm
+surface instead of fighting it:
+`keyword #b3402a · string #9c4a21 · number #8c5d00 · function #6f42c1 ·
+comment #62676d · type #953800 · punctuation #5e5d59`.
+
+## Marks
+
+**App icon: a dot-matrix butterfly** — clay wings, ink body, ivory ground. It
+reuses the same dot language as the agent-state indicator, so the app's mark and
+its liveliest UI element speak alike. Sparse by design: minimal marks survive at
+32px, dense ones turn to mud. Source: `app-icon.png`, generated by the script in
+the commit that added it.
+
+**File icons** (`src/icons/fileIcon.tsx`): one page silhouette for every file,
+with the palette's material colours carrying the type — so scanning the tree is
+about names, and colour never leaves the system. Folders are clay. Git state
+gets a letter badge (`M`/`A`/`?`/`!`), never colour alone.
+
+## Retired
+
+The previous "Dark Research Instrument — Amber" spec (graphite canvas, `#D9A441`
+amber, JetBrains Mono, 3px corners) is retired. `design/comps/*.html` are kept
+only as history — they do not reflect the shipping design.

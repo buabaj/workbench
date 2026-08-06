@@ -5,8 +5,8 @@ import { editorRegistry } from "./editorRegistry";
 import {
   applyLanguage,
   codeExtensions,
-  isResearchFile,
-  researchExtensions,
+  isMarkdown,
+  proseExtensions,
 } from "./extensions";
 import { ipc, onFsChanged } from "../ipc/client";
 import { useLinks } from "../store/links";
@@ -71,7 +71,7 @@ export function useEditorSession(workspaceId: string, relPath: string) {
           EditorState.create({
             doc: text,
             extensions: [
-              isResearchFile(relPath) ? researchExtensions() : codeExtensions(),
+              isMarkdown(relPath) ? proseExtensions() : codeExtensions(),
               dirtyListener,
               saveKeymap,
             ],
@@ -84,7 +84,7 @@ export function useEditorSession(workspaceId: string, relPath: string) {
           editorRegistry.set(relPath, { state, scrollTop: 0, diskHash });
           useWorkspace.getState().markSaved(relPath, diskHash);
         }
-        if (!isResearchFile(relPath)) void applyLanguage(view, relPath);
+        if (!isMarkdown(relPath)) void applyLanguage(view, relPath);
 
         // Cross-mode navigation: a link click parked a range for this file.
         const reveal = useWorkspace.getState().consumeReveal(relPath);

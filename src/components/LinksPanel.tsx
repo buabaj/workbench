@@ -37,12 +37,12 @@ function LinkRow({ link, relPath }: { link: LinkView; relPath: string }) {
     <div
       style={{
         padding: "7px 0",
-        borderTop: "1px solid var(--structure)",
+        borderTop: "1px solid var(--border)",
         fontSize: 11,
       }}
     >
       <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-        <span style={{ color: "var(--accent)", fontSize: 9, letterSpacing: "0.1em" }}>
+        <span style={{ color: "var(--clay-text)", fontSize: 9, letterSpacing: "0.1em" }}>
           {KIND_LABEL[link.kind] ?? link.kind.toUpperCase()}
         </span>
         <span
@@ -125,8 +125,8 @@ export function LinksPanel() {
       {pinned ? (
         <div
           style={{
-            border: "1px solid var(--accent-dim)",
-            borderRadius: "var(--r)",
+            border: "1px solid var(--clay-hover)",
+            borderRadius: "var(--r-card)",
             padding: "8px 10px",
             marginBottom: 10,
             fontSize: 11,
@@ -184,7 +184,7 @@ export function LinksPanel() {
       )}
 
       {error && (
-        <div style={{ color: "var(--danger)", fontSize: 10, marginBottom: 8 }}>{error}</div>
+        <div style={{ color: "var(--error)", fontSize: 10, marginBottom: 8 }}>{error}</div>
       )}
 
       {links.outgoing.length === 0 && links.incoming.length === 0 && !pinned && !selection && (

@@ -19,7 +19,7 @@ use super::AppAiError;
 use crate::secret::SecretString;
 
 const BASE: &str = "https://openrouter.ai/api/v1";
-const TITLE: &str = "Prime Workbench";
+const TITLE: &str = "Workbench";
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

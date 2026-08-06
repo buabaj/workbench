@@ -8,21 +8,15 @@ import { LinksPanel } from "./components/LinksPanel";
 import { PreflightPanel } from "./components/Preflight";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { SettingsSheet } from "./components/SettingsSheet";
+import { VoiceButton } from "./components/VoiceButton";
 import { ipc, onFsChanged, type WorkspaceView } from "./ipc/client";
 import { useTasks } from "./store/tasks";
 import { useVoice } from "./store/voice";
 import { useWorkspace } from "./store/workspace";
 
-function formatElapsed(ms: number): string {
-  const total = Math.floor(ms / 1000);
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
-
 export default function App() {
   const workspace = useWorkspace((s) => s.workspace);
-  const mode = useWorkspace((s) => s.mode);
   const active = useWorkspace((s) => s.active);
-  const setMode = useWorkspace((s) => s.setMode);
   const pickWorkspace = useWorkspace((s) => s.pickWorkspace);
   const refreshPreflight = useWorkspace((s) => s.refreshPreflight);
   const handleFsChanged = useWorkspace((s) => s.handleFsChanged);
@@ -97,17 +91,12 @@ export default function App() {
     <div className="app">
       <header className="bar" data-tauri-drag-region>
         <span className="bar-ws" data-tauri-drag-region>
-          {workspace ? `workbench · ${workspace.name}` : "workbench"}
+          Workbench{workspace && <span className="dim"> / {workspace.name}</span>}
         </span>
-        <div className="bar-mode">
-          <button className={mode === "code" ? "on" : ""} onClick={() => setMode("code")}>
-            CODE
-          </button>
-          <button className={mode === "research" ? "on" : ""} onClick={() => setMode("research")}>
-            RESEARCH
-          </button>
+        <div className="bar-search" role="button" tabIndex={0}>
+          <span>Search files…</span>
+          <kbd>⌘P</kbd>
         </div>
-        <div className="bar-search">⌘K — search workspace…</div>
       </header>
 
       <nav className="rail" aria-label="Workspace">
@@ -164,6 +153,7 @@ export default function App() {
         </ErrorBoundary>
       </nav>
 
+      <div className="center">
       <main className="canvas" aria-label="Editor">
         {active ? (
           <ErrorBoundary>
@@ -187,23 +177,6 @@ export default function App() {
         )}
       </main>
 
-      <aside className="inspector" aria-label="Inspector">
-        <ErrorBoundary>
-          <section className="panel" aria-labelledby="p-agent">
-            <h3 id="p-agent">AGENT ACTIVITY</h3>
-            <AgentActivity />
-          </section>
-          <section className="panel" aria-labelledby="p-review">
-            <h3 id="p-review">TASK REVIEW</h3>
-            <ReviewPanel />
-          </section>
-          <section className="panel" aria-labelledby="p-links">
-            <h3 id="p-links">LINKED EVIDENCE</h3>
-            <LinksPanel />
-          </section>
-        </ErrorBoundary>
-      </aside>
-
       <footer className="composer">
         <div className="composer-meta">
           <span
@@ -225,7 +198,7 @@ export default function App() {
             <span className="chip origin">{resolvedProfile.origin} default</span>
           )}
           {voiceError && (
-            <span style={{ color: "var(--danger)", fontSize: 10.5 }}>{voiceError}</span>
+            <span style={{ color: "var(--error)", fontSize: 10.5 }}>{voiceError}</span>
           )}
         </div>
         <div className="composer-row">
@@ -246,51 +219,38 @@ export default function App() {
               }
             }}
           />
-          {voicePhase === "recording" ? (
-            <>
-              <button
-                className="btn"
-                style={{ color: "var(--danger)", borderColor: "var(--danger)" }}
-                onClick={() => void toggleVoice(insertTranscript)}
-                title="Stop and transcribe (⌘⇧V)"
-              >
-                ■ {formatElapsed(voiceElapsed)}
-                <span
-                  aria-hidden
-                  style={{
-                    display: "inline-block",
-                    width: 4,
-                    height: 4,
-                    marginLeft: 6,
-                    borderRadius: "50%",
-                    background: "var(--danger)",
-                    opacity: 0.35 + Math.min(voiceLevel * 3, 0.65),
-                  }}
-                />
-              </button>
-              <button className="btn" onClick={() => void cancelVoice()} title="Discard">
-                ✕
-              </button>
-            </>
-          ) : (
-            <button
-              className="btn"
-              disabled={voicePhase === "transcribing" || !voiceCapability?.configured}
-              onClick={() => void toggleVoice(insertTranscript)}
-              title={
-                voiceCapability?.configured
-                  ? "Record and transcribe (⌘⇧V)"
-                  : "Configure voice transcription in settings"
-              }
-            >
-              {voicePhase === "transcribing" ? "transcribing…" : "◉ voice"}
-            </button>
-          )}
+          <VoiceButton
+            phase={voicePhase}
+            elapsedMs={voiceElapsed}
+            level={voiceLevel}
+            configured={Boolean(voiceCapability?.configured)}
+            onToggle={() => void toggleVoice(insertTranscript)}
+            onCancel={() => void cancelVoice()}
+          />
           <button className="btn primary" disabled={!canRun} onClick={submit}>
             {busy ? "Running…" : "Run task"}
           </button>
         </div>
       </footer>
+      </div>
+
+      <aside className="inspector" aria-label="Inspector">
+        <ErrorBoundary>
+          <section className="panel" aria-labelledby="p-agent">
+            <h3 id="p-agent">AGENT ACTIVITY</h3>
+            <AgentActivity />
+          </section>
+          <section className="panel" aria-labelledby="p-review">
+            <h3 id="p-review">TASK REVIEW</h3>
+            <ReviewPanel />
+          </section>
+          <section className="panel" aria-labelledby="p-links">
+            <h3 id="p-links">LINKED EVIDENCE</h3>
+            <LinksPanel />
+          </section>
+        </ErrorBoundary>
+      </aside>
+
 
       {settingsOpen && <SettingsSheet onClose={() => setSettingsOpen(false)} />}
     </div>

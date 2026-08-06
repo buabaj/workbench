@@ -89,8 +89,8 @@ function VoiceSetup() {
 
   const field: React.CSSProperties = {
     background: "var(--surface)",
-    border: "1px solid var(--structure-strong)",
-    borderRadius: "var(--r)",
+    border: "1px solid var(--border-strong)",
+    borderRadius: "var(--r-card)",
     color: "var(--ink)",
     font: "inherit",
     padding: "7px 10px",
@@ -98,7 +98,7 @@ function VoiceSetup() {
   };
 
   return (
-    <div style={{ marginTop: 20, borderTop: "1px solid var(--structure)", paddingTop: 14 }}>
+    <div style={{ marginTop: 20, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
       <div style={{ fontSize: 10, letterSpacing: "0.14em", color: "var(--ink-faint)", marginBottom: 8 }}>
         VOICE TRANSCRIPTION (OPENROUTER)
       </div>
@@ -215,8 +215,8 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
 
   const field: React.CSSProperties = {
     background: "var(--surface)",
-    border: "1px solid var(--structure-strong)",
-    borderRadius: "var(--r)",
+    border: "1px solid var(--border-strong)",
+    borderRadius: "var(--r-card)",
     color: "var(--ink)",
     font: "inherit",
     padding: "7px 10px",
@@ -240,8 +240,8 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
         style={{
           width: 440,
           background: "var(--canvas)",
-          border: "1px solid var(--structure-strong)",
-          borderRadius: "var(--r)",
+          border: "1px solid var(--border-strong)",
+          borderRadius: "var(--r-card)",
           padding: 20,
         }}
         onClick={(e) => e.stopPropagation()}
@@ -270,7 +270,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
                   alignItems: "center",
                   gap: 8,
                   padding: "6px 0",
-                  borderTop: "1px solid var(--structure)",
+                  borderTop: "1px solid var(--border)",
                   fontSize: 12,
                 }}
               >
@@ -332,7 +332,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
         </div>
 
         {err && (
-          <div style={{ marginTop: 10, fontSize: 11, color: "var(--danger)" }}>{err}</div>
+          <div style={{ marginTop: 10, fontSize: 11, color: "var(--error)" }}>{err}</div>
         )}
 
         <VoiceSetup />

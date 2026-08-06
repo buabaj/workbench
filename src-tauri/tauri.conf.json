@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Prime Workbench",
+  "productName": "Workbench",
   "mainBinaryName": "prime-workbench",
   "version": "0.1.0",
   "identifier": "co.morpheusgh.workbench",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Prime Workbench",
+        "title": "Workbench",
         "width": 1320,
         "height": 860,
         "minWidth": 980,

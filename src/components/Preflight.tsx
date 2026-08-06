@@ -4,11 +4,11 @@ import type { PreflightCheck } from "../ipc/client";
 function levelColor(level: PreflightCheck["level"]): string {
   switch (level) {
     case "ok":
-      return "var(--accent)";
+      return "var(--clay)";
     case "warn":
       return "var(--ink-muted)";
     case "fail":
-      return "var(--danger)";
+      return "var(--error)";
   }
 }
 
@@ -20,7 +20,7 @@ function CheckRow({ check }: { check: PreflightCheck }) {
         gap: 10,
         alignItems: "baseline",
         padding: "7px 0",
-        borderTop: "1px solid var(--structure)",
+        borderTop: "1px solid var(--border)",
         fontSize: 11.5,
         maxWidth: 520,
         textAlign: "left",

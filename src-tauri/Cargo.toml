@@ -1,7 +1,7 @@
 [package]
 name = "prime-workbench"
 version = "0.1.0"
-description = "Prime Workbench — local-first research and coding environment"
+description = "Workbench — local-first research and coding environment"
 edition = "2021"
 
 [[bin]]
