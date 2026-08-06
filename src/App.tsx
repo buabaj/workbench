@@ -4,6 +4,7 @@ import { DotMatrix } from "./components/DotMatrix";
 import { EditorPane } from "./components/EditorPane";
 import { FileTree } from "./components/FileTree";
 import { PreflightPanel } from "./components/Preflight";
+import { ReviewPanel } from "./components/ReviewPanel";
 import { SettingsSheet } from "./components/SettingsSheet";
 import { onFsChanged } from "./ipc/client";
 import { useTasks } from "./store/tasks";
@@ -107,6 +108,10 @@ export default function App() {
         <div className="panel">
           <h3>AGENT ACTIVITY</h3>
           <AgentActivity />
+        </div>
+        <div className="panel">
+          <h3>TASK REVIEW</h3>
+          <ReviewPanel />
         </div>
         <div className="panel">
           <h3>CONTEXT SHELF</h3>

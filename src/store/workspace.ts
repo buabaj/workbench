@@ -183,6 +183,9 @@ export async function saveBuffer(
     const out = await ipc.fileWrite(workspace.id, relPath, getText(), expected);
     editorRegistry.updateDiskHash(relPath, out.contentHash);
     useWorkspace.getState().markSaved(relPath, out.contentHash);
+    // Attribution signal: if a task is running, this file is now "Both",
+    // so the review panel won't offer to silently discard the user's work.
+    void ipc.reviewNoteUserEdit(workspace.id, relPath).catch(() => {});
     return "saved";
   } catch (e) {
     if (isConflict(e)) {

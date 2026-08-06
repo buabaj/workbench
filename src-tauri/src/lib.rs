@@ -6,6 +6,7 @@ pub mod error;
 pub mod fsx;
 pub mod profiles;
 pub mod secret;
+pub mod vcs;
 
 use std::sync::{Arc, Mutex};
 
@@ -96,6 +97,11 @@ pub fn run() {
             commands::tasks::agent_send,
             commands::tasks::agent_subscribe,
             commands::tasks::tasks_recent,
+            commands::review::review_task_diff,
+            commands::review::review_file_patch,
+            commands::review::review_keep,
+            commands::review::review_restore,
+            commands::review::review_note_user_edit,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

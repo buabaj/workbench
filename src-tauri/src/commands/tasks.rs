@@ -128,6 +128,24 @@ pub async fn agent_start_task(
         )?
     };
 
+    // Pre-task checkpoint — the safety net. A failure here aborts the task
+    // rather than letting an agent loose with no way back.
+    super::review::create_pre_task_checkpoint(
+        &state,
+        &data_dir,
+        &workspace_id,
+        &task_id,
+        std::path::Path::new(&cwd),
+    )
+    .map_err(|e| {
+        let conn = state.db.lock().expect("db lock");
+        let _ = conn.execute(
+            "UPDATE tasks SET status='failed', error_text=?1, ended_at=?2 WHERE id=?3",
+            rusqlite::params![format!("checkpoint failed: {e}"), now_ms(), task_id],
+        );
+        e
+    })?;
+
     // Spawn + handshake + register.
     let outcome = state
         .supervisor

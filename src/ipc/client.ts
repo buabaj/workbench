@@ -135,6 +135,33 @@ export interface TaskStreamEnvelope {
   item: StreamItem;
 }
 
+export type FileStatus = "added" | "modified" | "deleted" | "renamed" | "type_changed";
+export type Attribution = "agent_only" | "user_only" | "both" | "unknown";
+
+export interface FileDiffSummary {
+  relPath: string;
+  oldPath: string | null;
+  status: FileStatus;
+  insertions: number;
+  deletions: number;
+  isBinary: boolean;
+  attribution: Attribution;
+}
+
+export interface TaskDiff {
+  files: FileDiffSummary[];
+  skipped: string[];
+  attributionDegraded: boolean;
+}
+
+export interface RestoreResult {
+  restored: string[];
+  trashed: string[];
+  recreated: string[];
+  refused: [string, string][];
+  undoRef: string | null;
+}
+
 export const ipc = {
   workspacePick: () => invoke<WorkspaceView | null>("workspace_pick"),
   workspaceOpen: (path: string) => invoke<WorkspaceView>("workspace_open", { path }),
@@ -175,6 +202,15 @@ export const ipc = {
     invoke<void>("profiles_set_default", { workspaceId, profileId }),
   profilesResolve: (workspaceId: string | null, taskOverride: string | null) =>
     invoke<ResolvedAgentProfile>("profiles_resolve", { workspaceId, taskOverride }),
+
+  reviewTaskDiff: (taskId: string) => invoke<TaskDiff>("review_task_diff", { taskId }),
+  reviewFilePatch: (taskId: string, relPath: string) =>
+    invoke<string>("review_file_patch", { taskId, relPath }),
+  reviewKeep: (taskId: string) => invoke<void>("review_keep", { taskId }),
+  reviewRestore: (taskId: string, paths: string[]) =>
+    invoke<RestoreResult>("review_restore", { taskId, paths }),
+  reviewNoteUserEdit: (workspaceId: string, relPath: string) =>
+    invoke<void>("review_note_user_edit", { workspaceId, relPath }),
 
   agentStopTask: (taskId: string, force: boolean) =>
     invoke<void>("agent_stop_task", { taskId, force }),
