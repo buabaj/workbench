@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AgentActivity } from "./components/AgentActivity";
 import { DotMatrix } from "./components/DotMatrix";
 import { EditorPane } from "./components/EditorPane";
@@ -9,7 +9,13 @@ import { ReviewPanel } from "./components/ReviewPanel";
 import { SettingsSheet } from "./components/SettingsSheet";
 import { onFsChanged } from "./ipc/client";
 import { useTasks } from "./store/tasks";
+import { useVoice } from "./store/voice";
 import { useWorkspace } from "./store/workspace";
+
+function formatElapsed(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
 
 export default function App() {
   const workspace = useWorkspace((s) => s.workspace);
@@ -29,6 +35,15 @@ export default function App() {
   const [prompt, setPrompt] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  const voicePhase = useVoice((s) => s.phase);
+  const voiceElapsed = useVoice((s) => s.elapsedMs);
+  const voiceLevel = useVoice((s) => s.level);
+  const voiceError = useVoice((s) => s.error);
+  const voiceCapability = useVoice((s) => s.capability);
+  const toggleVoice = useVoice((s) => s.toggle);
+  const cancelVoice = useVoice((s) => s.cancel);
+  const refreshVoiceCapability = useVoice((s) => s.refreshCapability);
+
   useEffect(() => {
     void refreshPreflight();
     const un = onFsChanged(handleFsChanged);
@@ -40,6 +55,29 @@ export default function App() {
   useEffect(() => {
     void refreshProfile(workspace?.id ?? null);
   }, [workspace?.id, refreshProfile]);
+
+  useEffect(() => {
+    void refreshVoiceCapability();
+  }, [refreshVoiceCapability, settingsOpen]);
+
+  // Transcript arrives as ordinary editable text appended to the composer.
+  // There is deliberately no path from here to submitting the task.
+  const insertTranscript = useCallback(
+    (text: string) => setPrompt((p) => (p ? `${p.trimEnd()} ${text}` : text)),
+    [],
+  );
+
+  // ⌘⇧V toggles recording — click-to-start/stop, never hold-to-talk.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        void toggleVoice(insertTranscript);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleVoice, insertTranscript]);
 
   const busy = taskStatus === "starting" || taskStatus === "running";
   const canRun = Boolean(workspace && resolvedProfile && prompt.trim() && !busy);
@@ -144,6 +182,9 @@ export default function App() {
           {resolvedProfile && (
             <span className="chip origin">{resolvedProfile.origin} default</span>
           )}
+          {voiceError && (
+            <span style={{ color: "var(--danger)", fontSize: 10.5 }}>{voiceError}</span>
+          )}
         </div>
         <div className="composer-row">
           <input
@@ -163,9 +204,46 @@ export default function App() {
               }
             }}
           />
-          <button className="btn" disabled title="Voice input arrives in a later phase">
-            ◉ voice
-          </button>
+          {voicePhase === "recording" ? (
+            <>
+              <button
+                className="btn"
+                style={{ color: "var(--danger)", borderColor: "var(--danger)" }}
+                onClick={() => void toggleVoice(insertTranscript)}
+                title="Stop and transcribe (⌘⇧V)"
+              >
+                ■ {formatElapsed(voiceElapsed)}
+                <span
+                  aria-hidden
+                  style={{
+                    display: "inline-block",
+                    width: 4,
+                    height: 4,
+                    marginLeft: 6,
+                    borderRadius: "50%",
+                    background: "var(--danger)",
+                    opacity: 0.35 + Math.min(voiceLevel * 3, 0.65),
+                  }}
+                />
+              </button>
+              <button className="btn" onClick={() => void cancelVoice()} title="Discard">
+                ✕
+              </button>
+            </>
+          ) : (
+            <button
+              className="btn"
+              disabled={voicePhase === "transcribing" || !voiceCapability?.configured}
+              onClick={() => void toggleVoice(insertTranscript)}
+              title={
+                voiceCapability?.configured
+                  ? "Record and transcribe (⌘⇧V)"
+                  : "Configure voice transcription in settings"
+              }
+            >
+              {voicePhase === "transcribing" ? "transcribing…" : "◉ voice"}
+            </button>
+          )}
           <button className="btn primary" disabled={!canRun} onClick={submit}>
             {busy ? "Running…" : "Run task"}
           </button>

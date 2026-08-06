@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod anchors;
+pub mod appai;
 pub mod commands;
 pub mod creds;
 pub mod db;
@@ -8,6 +9,7 @@ pub mod fsx;
 pub mod profiles;
 pub mod secret;
 pub mod vcs;
+pub mod voice;
 
 use std::sync::{Arc, Mutex};
 
@@ -52,6 +54,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::workspace::OpenWorkspaces::default())
+        .manage(voice::session::VoiceState::default())
         .setup(|app| {
             let data_dir = app.path().app_local_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -61,6 +64,9 @@ pub fn run() {
             // but must not accumulate.
             if let Ok(cache_dir) = app.path().app_cache_dir() {
                 agent::config_dir::IsolatedConfigDir::sweep(&cache_dir);
+                // Nothing in the voice dir is meant to outlive a session.
+                app.state::<voice::session::VoiceState>()
+                    .sweep_on_startup(&cache_dir);
             }
 
             app.manage(AppState {
@@ -107,6 +113,14 @@ pub fn run() {
             commands::links::link_delete,
             commands::links::links_for_file,
             commands::links::link_kinds,
+            commands::voice::voice_capability,
+            commands::voice::voice_begin,
+            commands::voice::voice_push,
+            commands::voice::voice_cancel,
+            commands::voice::voice_finish,
+            commands::voice::voice_configure,
+            commands::voice::models_for_capability,
+            commands::voice::appai_capabilities,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -115,6 +129,10 @@ pub fn run() {
                 // Best-effort child cleanup; kill_on_drop is the backstop.
                 if let Some(state) = app.try_state::<AppState>() {
                     state.supervisor.kill_all();
+                }
+                // Drops every session, unlinking any in-flight recording.
+                if let Some(voice) = app.try_state::<voice::session::VoiceState>() {
+                    voice.cancel_all();
                 }
             }
         });

@@ -20,6 +20,8 @@ pub enum AppError {
     FileConflict { disk_hash: String },
     #[error("no agent profile configured")]
     NoProfileConfigured,
+    #[error("{message}")]
+    AppAi { code: String, message: String },
     #[error("internal error: {0}")]
     Internal(String),
 }

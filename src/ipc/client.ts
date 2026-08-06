@@ -154,6 +154,29 @@ export interface TaskDiff {
   attributionDegraded: boolean;
 }
 
+export interface VoiceCapability {
+  configured: boolean;
+  modelIds: string[];
+  privacyMode: string;
+  credentialLabel: string | null;
+}
+
+export interface TranscriptResult {
+  text: string;
+  modelServed: string | null;
+  durationMs: number;
+  usage: unknown;
+}
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+  inputModalities: string[];
+  outputModalities: string[];
+  contextLength: number | null;
+  pricePrompt: string | null;
+}
+
 export interface AnchorSpec {
   relPath: string;
   from: number;
@@ -234,6 +257,16 @@ export const ipc = {
     invoke<void>("profiles_set_default", { workspaceId, profileId }),
   profilesResolve: (workspaceId: string | null, taskOverride: string | null) =>
     invoke<ResolvedAgentProfile>("profiles_resolve", { workspaceId, taskOverride }),
+
+  voiceCapability: () => invoke<VoiceCapability>("voice_capability"),
+  voiceBegin: (sampleRate: number) => invoke<string>("voice_begin", { sampleRate }),
+  voiceCancel: (sessionId: string) => invoke<void>("voice_cancel", { sessionId }),
+  voiceFinish: (sessionId: string, language: string | null) =>
+    invoke<TranscriptResult>("voice_finish", { sessionId, language }),
+  voiceConfigure: (credentialProfileId: string, modelIds: string[], privacyMode: string) =>
+    invoke<void>("voice_configure", { credentialProfileId, modelIds, privacyMode }),
+  modelsForCapability: (capability: string) =>
+    invoke<ModelInfo[]>("models_for_capability", { capability }),
 
   linkCreate: (
     workspaceId: string,
