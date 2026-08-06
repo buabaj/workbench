@@ -10,6 +10,16 @@ pub enum AppError {
     Db(String),
     #[error("io error: {0}")]
     Io(String),
+    #[error("validation: {0}")]
+    Validation(String),
+    #[error("{0} not found")]
+    NotFound(String),
+    #[error("credential is referenced by profiles — reassign or delete them first")]
+    CredentialInUse,
+    #[error("file changed on disk")]
+    FileConflict { disk_hash: String },
+    #[error("no agent profile configured")]
+    NoProfileConfigured,
     #[error("internal error: {0}")]
     Internal(String),
 }

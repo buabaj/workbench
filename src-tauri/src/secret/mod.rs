@@ -5,6 +5,15 @@
 //! - No Tauri command return type can contain a secret — it fails to compile.
 //! - Every read of the value is a grep-auditable `.expose()` call site.
 //! - The heap buffer is zeroized on drop.
+//!
+//! The compile-time guarantee, as a doctest:
+//!
+//! ```compile_fail
+//! #[derive(serde::Serialize)]
+//! struct Leaky {
+//!     s: prime_workbench_lib::secret::SecretString, // must NOT compile
+//! }
+//! ```
 
 use zeroize::Zeroizing;
 

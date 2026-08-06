@@ -1,27 +1,33 @@
-import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useEffect } from "react";
 import { DotMatrix } from "./components/DotMatrix";
-
-type Mode = "code" | "research";
-
-interface DbHealth {
-  schemaVersion: number;
-  path: string;
-}
+import { EditorPane } from "./components/EditorPane";
+import { FileTree } from "./components/FileTree";
+import { PreflightPanel } from "./components/Preflight";
+import { onFsChanged } from "./ipc/client";
+import { useWorkspace } from "./store/workspace";
 
 export default function App() {
-  const [mode, setMode] = useState<Mode>("research");
-  const [db, setDb] = useState<DbHealth | null>(null);
+  const workspace = useWorkspace((s) => s.workspace);
+  const mode = useWorkspace((s) => s.mode);
+  const active = useWorkspace((s) => s.active);
+  const setMode = useWorkspace((s) => s.setMode);
+  const pickWorkspace = useWorkspace((s) => s.pickWorkspace);
+  const refreshPreflight = useWorkspace((s) => s.refreshPreflight);
+  const handleFsChanged = useWorkspace((s) => s.handleFsChanged);
 
   useEffect(() => {
-    invoke<DbHealth>("db_health").then(setDb).catch(console.error);
-  }, []);
+    void refreshPreflight();
+    const un = onFsChanged(handleFsChanged);
+    return () => {
+      void un.then((f) => f());
+    };
+  }, [refreshPreflight, handleFsChanged]);
 
   return (
     <div className="app">
       <header className="bar" data-tauri-drag-region>
         <span className="bar-ws" data-tauri-drag-region>
-          workbench
+          {workspace ? `workbench · ${workspace.name}` : "workbench"}
         </span>
         <div className="bar-mode">
           <button className={mode === "code" ? "on" : ""} onClick={() => setMode("code")}>
@@ -35,28 +41,40 @@ export default function App() {
       </header>
 
       <nav className="rail">
-        <div className="rail-section">
-          <h3>RESEARCH</h3>
-          <div className="rail-item">No documents yet</div>
-        </div>
-        <div className="rail-section">
-          <h3>CODE</h3>
-          <div className="rail-item">No workspace open</div>
-        </div>
-        <div className="rail-section">
-          <h3>TASKS</h3>
-          <div className="rail-item">No tasks yet</div>
-        </div>
+        {workspace ? (
+          <div className="rail-section">
+            <h3>{workspace.name.toUpperCase()}</h3>
+            <FileTree />
+          </div>
+        ) : (
+          <div className="rail-section">
+            <h3>WORKSPACE</h3>
+            <div className="rail-item" onClick={() => void pickWorkspace()}>
+              Open folder…
+            </div>
+          </div>
+        )}
       </nav>
 
       <main className="canvas">
-        <div className="canvas-empty">
-          <DotMatrix state="awaiting-input" />
-          <div className="serif">Open a workspace to begin.</div>
-          <div style={{ fontSize: 11 }}>
-            {db ? `db schema v${db.schemaVersion}` : "connecting…"} · {mode} mode
+        {active ? (
+          <EditorPane />
+        ) : (
+          <div className="canvas-empty">
+            <DotMatrix state="awaiting-input" />
+            {workspace ? (
+              <div className="serif">Select a file from the rail.</div>
+            ) : (
+              <>
+                <div className="serif">Open a workspace to begin.</div>
+                <button className="btn" onClick={() => void pickWorkspace()}>
+                  Open folder…
+                </button>
+              </>
+            )}
+            <PreflightPanel />
           </div>
-        </div>
+        )}
       </main>
 
       <aside className="inspector">
