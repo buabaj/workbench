@@ -6,16 +6,25 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FileTree } from "./components/FileTree";
 import { LinksPanel } from "./components/LinksPanel";
 import { Palette, type PaletteMode } from "./components/Palette";
-import { PreflightPanel } from "./components/Preflight";
 import { ReviewPanel } from "./components/ReviewPanel";
-import { SettingsSheet } from "./components/SettingsSheet";
+import { SettingsView } from "./components/SettingsView";
 import { TabStrip } from "./components/TabStrip";
 import { VoiceButton } from "./components/VoiceButton";
 import { ipc, onFsChanged, type WorkspaceView } from "./ipc/client";
 import { useLayout } from "./store/layout";
+import { useTheme } from "./store/theme";
 import { useTasks } from "./store/tasks";
 import { useVoice } from "./store/voice";
 import { useWorkspace } from "./store/workspace";
+
+const STATUS_LABEL: Record<string, string> = {
+  idle: "READY",
+  starting: "STARTING",
+  running: "WORKING",
+  succeeded: "DONE",
+  failed: "FAILED",
+  cancelled: "STOPPED",
+};
 
 /** The centre when the chat tab is active: the conversation, at a reading
  *  measure, instead of a cramped box at the bottom of the window. */
@@ -66,16 +75,19 @@ export default function App() {
   const closeTab = useLayout((s) => s.closeTab);
   const openSettingsTab = useLayout((s) => s.openSettings);
 
+  const resolvedTheme = useTheme((s) => s.resolved);
+  const toggleTheme = useTheme((s) => s.toggle);
+  const initTheme = useTheme((s) => s.init);
+
   const taskStatus = useTasks((s) => s.status);
   const matrix = useTasks((s) => s.matrix);
   const resolvedProfile = useTasks((s) => s.resolvedProfile);
-  const profileMissing = useTasks((s) => s.profileMissing);
   const refreshProfile = useTasks((s) => s.refreshProfile);
   const runTask = useTasks((s) => s.runTask);
 
   const voicePhase = useVoice((s) => s.phase);
   const voiceElapsed = useVoice((s) => s.elapsedMs);
-  const voiceLevel = useVoice((s) => s.level);
+  const voiceLevels = useVoice((s) => s.levels);
   const voiceError = useVoice((s) => s.error);
   const voiceCapability = useVoice((s) => s.capability);
   const toggleVoice = useVoice((s) => s.toggle);
@@ -83,20 +95,20 @@ export default function App() {
   const refreshVoiceCapability = useVoice((s) => s.refreshCapability);
 
   const [prompt, setPrompt] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   useEffect(() => {
+    initTheme();
     void refreshPreflight();
     void ipc.workspaceRecent().then(setRecent).catch(() => {});
     const un = onFsChanged(handleFsChanged);
     return () => {
       void un.then((f) => f());
     };
-  }, [refreshPreflight, handleFsChanged]);
+  }, [initTheme, refreshPreflight, handleFsChanged]);
 
   useEffect(() => {
     void refreshProfile(workspace?.id ?? null);
@@ -104,7 +116,7 @@ export default function App() {
 
   useEffect(() => {
     void refreshVoiceCapability();
-  }, [refreshVoiceCapability, settingsOpen]);
+  }, [refreshVoiceCapability, activeTabId]);
 
   // Transcript arrives as ordinary editable text. There is deliberately no
   // path from here to submitting the task.
@@ -205,14 +217,47 @@ export default function App() {
             <path d="M9.5 2.5v10" stroke="currentColor" strokeWidth="1.2" />
           </svg>
         </button>
-        <button className="btn icon" onClick={() => setSettingsOpen(true)} aria-label="Providers" title="Providers">
+        <button
+          className="btn icon"
+          onClick={() => {}}
+          aria-label="Toggle terminal"
+          title="Terminal — arriving in the next pass"
+          disabled
+        >
+          <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
+            <rect x="1.5" y="2.5" width="12" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M1.5 8.5h12" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        </button>
+        <button
+          className="btn icon"
+          onClick={toggleTheme}
+          aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`}
+          title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`}
+        >
+          {resolvedTheme === "dark" ? (
+            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
+              <circle cx="7.5" cy="7.5" r="3" fill="none" stroke="currentColor" strokeWidth="1.2" />
+              <path
+                d="M7.5 1v1.8M7.5 12.2V14M14 7.5h-1.8M2.8 7.5H1M12.1 2.9l-1.3 1.3M4.2 10.8l-1.3 1.3M12.1 12.1l-1.3-1.3M4.2 4.2L2.9 2.9"
+                stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"
+              />
+            </svg>
+          ) : (
+            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
+              <path
+                d="M12.5 9.3A5.5 5.5 0 0 1 5.7 2.5a5.5 5.5 0 1 0 6.8 6.8Z"
+                fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"
+              />
+            </svg>
+          )}
+        </button>
+        <button className="btn icon" onClick={openSettingsTab} aria-label="Settings" title="Settings (⌘,)">
           <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
             <circle cx="7.5" cy="7.5" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
             <path
               d="M7.5 1.5v1.6M7.5 11.9v1.6M13.5 7.5h-1.6M3.1 7.5H1.5M11.7 3.3l-1.1 1.1M4.4 10.6l-1.1 1.1M11.7 11.7l-1.1-1.1M4.4 4.4L3.3 3.3"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              strokeLinecap="round"
+              stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"
             />
           </svg>
         </button>
@@ -281,9 +326,7 @@ export default function App() {
             {activeTab?.kind === "file" ? (
               <EditorPane />
             ) : activeTab?.kind === "settings" ? (
-              <div style={{ maxWidth: 640, margin: "0 auto", padding: "var(--s-8) var(--s-6)" }}>
-                <PreflightPanel />
-              </div>
+              <SettingsView />
             ) : (
               <ChatView />
             )}
@@ -291,25 +334,11 @@ export default function App() {
         </main>
 
         <footer className="composer">
-          <div className="composer-meta">
-            <span
-              className="chip"
-              style={{ cursor: "pointer" }}
-              onClick={() => setSettingsOpen(true)}
-              title="Configure providers"
-            >
-              {resolvedProfile ? (
-                <>
-                  <b>{resolvedProfile.profile.label}</b>
-                  {resolvedProfile.profile.modelId ? ` · ${resolvedProfile.profile.modelId}` : ""}
-                </>
-              ) : (
-                <b>{profileMissing ? "set up a provider…" : "resolving…"}</b>
-              )}
-            </span>
-            {resolvedProfile && <span className="chip origin">{resolvedProfile.origin} default</span>}
-            {voiceError && <span style={{ color: "var(--error)", fontSize: "var(--text-xs)" }}>{voiceError}</span>}
-          </div>
+          {voiceError && (
+            <div className="composer-meta" role="alert">
+              <span style={{ color: "var(--error)", fontSize: "var(--text-xs)" }}>{voiceError}</span>
+            </div>
+          )}
           <div className="composer-row">
             <input
               className="composer-input"
@@ -327,13 +356,30 @@ export default function App() {
             <VoiceButton
               phase={voicePhase}
               elapsedMs={voiceElapsed}
-              level={voiceLevel}
+              levels={voiceLevels}
               configured={Boolean(voiceCapability?.configured)}
               onToggle={() => void toggleVoice(insertTranscript)}
               onCancel={() => void cancelVoice()}
             />
-            <button className="btn primary" disabled={!canRun} onClick={submit}>
-              {busy ? "Running…" : "Send"}
+            <button
+              className="btn primary send"
+              disabled={!canRun}
+              onClick={submit}
+              aria-label={busy ? "Running" : "Send"}
+              title={busy ? "Running…" : "Send (↵)"}
+            >
+              {busy ? (
+                <span className="matrix animate" style={{ gridTemplateColumns: "repeat(3, 3px)" }}>
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                    <i key={i} className={i % 3 === 1 ? "a" : ""} />
+                  ))}
+                </span>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
+                  <path d="M7.5 12V3M4 6.5L7.5 3l3.5 3.5" fill="none" stroke="currentColor"
+                        strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
             </button>
           </div>
         </footer>
@@ -344,9 +390,22 @@ export default function App() {
           <ErrorBoundary>
             <section className="panel" aria-labelledby="p-agent">
               <h3 id="p-agent">Agent</h3>
-              <div className="state-row">
-                <DotMatrix state={matrix} />
-                <div className="state-sub">{taskStatus}</div>
+              <div className="card">
+                <div className="state-row">
+                  <DotMatrix state={matrix} />
+                  <div style={{ flex: 1 }}>
+                    <div className="state-label" role="status" aria-live="polite">
+                      {STATUS_LABEL[taskStatus] ?? taskStatus}
+                    </div>
+                    <div className="state-sub">
+                      {resolvedProfile
+                        ? `${resolvedProfile.profile.label}${
+                            resolvedProfile.profile.modelId ? ` · ${resolvedProfile.profile.modelId}` : ""
+                          }`
+                        : "no provider configured"}
+                    </div>
+                  </div>
+                </div>
               </div>
             </section>
             <section className="panel" aria-labelledby="p-review">
@@ -361,7 +420,6 @@ export default function App() {
         </aside>
       )}
 
-      {settingsOpen && <SettingsSheet onClose={() => setSettingsOpen(false)} />}
       {palette && <Palette mode={palette} onClose={() => setPalette(null)} />}
     </div>
   );

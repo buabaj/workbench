@@ -121,6 +121,7 @@ body {
   transition: transform var(--dur-fast) var(--ease);
 }
 .rail-item .file-icon { width: 14px; height: 14px; flex-shrink: 0; display: block; }
+.file-icon { width: 13px; height: 13px; flex-shrink: 0; display: block; }
 .rail-item .label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -241,6 +242,35 @@ body {
 .composer-input:focus {
   border-color: var(--clay);
   box-shadow: 0 0 0 3px var(--clay-wash);
+}
+
+/* ── form fields ──────────────────────────────────────────────────────── */
+.field {
+  width: 100%;
+  background: var(--canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-input);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 7px var(--s-3);
+  outline: none;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.field::placeholder { color: var(--ink-faint); }
+.field:focus, .field:focus-visible {
+  border-color: var(--clay);
+  box-shadow: 0 0 0 3px var(--clay-wash);
+  outline: none;
+}
+
+/* Send: a circle, so the primary action reads as a single confident mark. */
+.btn.send {
+  border-radius: var(--r-pill);
+  padding: 7px;
+  width: 31px;
+  height: 31px;
+  justify-content: center;
 }
 
 /* ── chips ────────────────────────────────────────────────────────────── */

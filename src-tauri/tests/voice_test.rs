@@ -42,12 +42,7 @@ fn capture_at_48k_produces_a_16k_wav_ready_to_upload() {
     assert!((reader.duration() as i64 - 32_000).abs() < 800);
 
     // The request body carries exactly these bytes, base64-encoded, as wav.
-    let body = transcription_body(
-        &["openai/whisper-1".into()],
-        &wav,
-        None,
-        PrivacyMode::Strict,
-    );
+    let body = transcription_body("openai/whisper-1", &wav, None, PrivacyMode::Strict);
     use base64::Engine;
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(body["input_audio"]["data"].as_str().unwrap())

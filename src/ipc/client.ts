@@ -306,6 +306,36 @@ export function onFsChanged(handler: (e: FsChanged) => void): Promise<UnlistenFn
   return listen<FsChanged>("fs://changed", (event) => handler(event.payload));
 }
 
+/**
+ * Tauri command errors arrive as the serde-tagged AppError:
+ *   { code, detail }            for most variants
+ *   { code: "app_ai", detail: { code, message } }
+ * `String(e.detail)` on the nested shape produced "[object Object]" in the UI,
+ * which told the user nothing. This unwraps to the most specific human string
+ * available, whatever the depth.
+ */
+export function formatError(e: unknown): string {
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message;
+  if (typeof e === "object" && e !== null) {
+    const o = e as Record<string, unknown>;
+    if (typeof o.message === "string") return o.message;
+    if (o.detail !== undefined) {
+      const inner = formatError(o.detail);
+      if (inner && inner !== "[object Object]") {
+        return typeof o.code === "string" && !inner.includes(o.code) ? inner : inner;
+      }
+    }
+    if (typeof o.code === "string") return o.code.replace(/_/g, " ");
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return "unknown error";
+    }
+  }
+  return String(e);
+}
+
 export function isConflict(e: unknown): e is { code: "file_conflict"; detail: { diskHash: string } } {
   return (
     typeof e === "object" && e !== null && (e as AppErrorShape).code === "file_conflict"

@@ -4,8 +4,10 @@
 //! - transcription is a dedicated endpoint, `POST /api/v1/audio/transcriptions`,
 //!   with `input_audio: {data, format}` (base64 JSON, not multipart — one code
 //!   path and no 25 MB ceiling);
-//! - model fallbacks use a top-level `models: [...]` array INSTEAD of `model`,
-//!   and the response's `model` field says which one actually ran;
+//! - `/audio/transcriptions` takes a SINGULAR `model` string. The `models: [...]`
+//!   fallback array is a `/chat/completions` feature and is rejected here with
+//!   a 400 (verified against the live API), so the fallback chain is walked
+//!   client-side instead;
 //! - `provider.zdr` and `provider.data_collection` are different things, so
 //!   strict privacy sets both, plus `allow_fallbacks: false` — without it
 //!   OpenRouter may fall back to a non-ZDR provider and quietly void the
@@ -57,7 +59,7 @@ impl PrivacyMode {
 /// Build the transcription request body. Separated from the HTTP call so the
 /// exact wire shape is unit-testable without a network.
 pub fn transcription_body(
-    models: &[String],
+    model: &str,
     wav: &[u8],
     language: Option<&str>,
     privacy: PrivacyMode,
@@ -65,7 +67,7 @@ pub fn transcription_body(
     use base64::Engine;
     let data = base64::engine::general_purpose::STANDARD.encode(wav);
     let mut body = serde_json::json!({
-        "models": models,
+        "model": model,
         "input_audio": { "data": data, "format": "wav" }
     });
     if let Some(lang) = language {
@@ -113,6 +115,9 @@ fn map_reqwest(e: reqwest::Error, timeout_ms: u64) -> AppAiError {
     }
 }
 
+/// Try each model in order. The endpoint has no server-side fallback, so the
+/// chain is walked here: a model that is unavailable or rejects the request
+/// advances to the next rather than failing the whole transcription.
 pub async fn transcribe(
     key: &SecretString,
     models: &[String],
@@ -121,8 +126,31 @@ pub async fn transcribe(
     privacy: PrivacyMode,
     timeout_ms: u64,
 ) -> Result<TranscriptResult, AppAiError> {
+    let mut last = AppAiError::Other("no models configured".into());
+    for model in models {
+        match transcribe_one(key, model, wav, language, privacy, timeout_ms).await {
+            Ok(result) => return Ok(result),
+            // A timeout or an offline network won't improve on the next model.
+            Err(e @ (AppAiError::Timeout(_) | AppAiError::Offline)) => return Err(e),
+            Err(e) => {
+                tracing::warn!(model, error = %e, "transcription model failed, trying next");
+                last = e;
+            }
+        }
+    }
+    Err(last)
+}
+
+async fn transcribe_one(
+    key: &SecretString,
+    model: &str,
+    wav: &[u8],
+    language: Option<&str>,
+    privacy: PrivacyMode,
+    timeout_ms: u64,
+) -> Result<TranscriptResult, AppAiError> {
     let started = std::time::Instant::now();
-    let body = transcription_body(models, wav, language, privacy);
+    let body = transcription_body(model, wav, language, privacy);
     let resp = client(timeout_ms)?
         .post(format!("{BASE}/audio/transcriptions"))
         .bearer_auth(key.expose())
@@ -143,9 +171,8 @@ pub async fn transcribe(
     let parsed: TranscriptionResponse = resp.json().await.map_err(|_| AppAiError::Decode)?;
     Ok(TranscriptResult {
         text: parsed.text,
-        // Read back which model actually ran — with a fallback chain it is not
-        // necessarily the one requested.
-        model_served: parsed.model,
+        // Read back what actually ran; the provider may resolve an alias.
+        model_served: parsed.model.or_else(|| Some(model.to_string())),
         duration_ms: started.elapsed().as_millis() as u64,
         usage: parsed.usage,
     })
@@ -270,7 +297,7 @@ mod tests {
 
     #[test]
     fn strict_privacy_sets_zdr_and_data_collection_and_disables_fallbacks() {
-        let body = transcription_body(&["a".into()], b"RIFF", None, PrivacyMode::Strict);
+        let body = transcription_body("a", b"RIFF", None, PrivacyMode::Strict);
         let p = &body["provider"];
         assert_eq!(p["zdr"], true);
         assert_eq!(p["data_collection"], "deny");
@@ -279,7 +306,7 @@ mod tests {
 
     #[test]
     fn balanced_privacy_omits_zdr_but_keeps_data_collection() {
-        let body = transcription_body(&["a".into()], b"RIFF", None, PrivacyMode::Balanced);
+        let body = transcription_body("a", b"RIFF", None, PrivacyMode::Balanced);
         assert!(body["provider"].get("zdr").is_none());
         assert_eq!(body["provider"]["data_collection"], "deny");
         assert_eq!(body["provider"]["allow_fallbacks"], true);
@@ -287,28 +314,26 @@ mod tests {
 
     #[test]
     fn privacy_off_omits_the_provider_block_entirely() {
-        let body = transcription_body(&["a".into()], b"RIFF", None, PrivacyMode::Off);
+        let body = transcription_body("a", b"RIFF", None, PrivacyMode::Off);
         assert!(body.get("provider").is_none());
     }
 
     #[test]
-    fn uses_models_array_never_a_model_key() {
-        let body = transcription_body(
-            &["openai/whisper-1".into(), "openai/gpt-4o-transcribe".into()],
-            b"RIFF",
-            None,
-            PrivacyMode::Strict,
-        );
-        assert!(body.get("model").is_none(), "singular `model` breaks fallbacks");
-        assert_eq!(body["models"][0], "openai/whisper-1");
-        assert_eq!(body["models"][1], "openai/gpt-4o-transcribe");
+    fn uses_a_singular_model_key_never_the_models_array() {
+        // Verified against the live API: `models: [...]` returns HTTP 400 here
+        // ("expected string, received undefined" for `model`). The array is a
+        // /chat/completions feature; this endpoint has no server-side fallback,
+        // so `transcribe` walks the chain itself.
+        let body = transcription_body("openai/whisper-1", b"RIFF", None, PrivacyMode::Strict);
+        assert_eq!(body["model"], "openai/whisper-1");
+        assert!(body.get("models").is_none(), "models[] is rejected by this endpoint");
     }
 
     #[test]
     fn audio_is_base64_with_wav_format() {
         use base64::Engine;
         let wav = b"RIFF\x00\x00\x00\x00WAVE";
-        let body = transcription_body(&["a".into()], wav, Some("en"), PrivacyMode::Strict);
+        let body = transcription_body("a", wav, Some("en"), PrivacyMode::Strict);
         assert_eq!(body["input_audio"]["format"], "wav");
         assert_eq!(body["language"], "en");
         let encoded = body["input_audio"]["data"].as_str().unwrap();

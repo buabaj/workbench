@@ -66,7 +66,7 @@ export function Palette({
         key: f,
         label: name,
         detail: dir,
-        icon: <FileIcon name={name} />,
+        icon: <span style={{ width: 13, height: 13, display: "block" }}><FileIcon name={name} /></span>,
         run: () => openFile(f),
       };
     });
@@ -103,8 +103,8 @@ export function Palette({
         role="dialog"
         aria-label={mode === "files" ? "Open file" : "Run command"}
         style={{
-          width: 560,
-          maxWidth: "90vw",
+          width: 480,
+          maxWidth: "88vw",
           background: "var(--canvas)",
           border: "1px solid var(--border)",
           borderRadius: "var(--r-panel)",
@@ -124,9 +124,9 @@ export function Palette({
             border: "none",
             borderBottom: "1px solid var(--border)",
             background: "transparent",
-            padding: "var(--s-3) var(--s-4)",
+            padding: "10px var(--s-3)",
             font: "inherit",
-            fontSize: "var(--text-md)",
+            fontSize: "var(--text-base)",
             color: "var(--ink)",
             outline: "none",
           }}
@@ -146,7 +146,7 @@ export function Palette({
             }
           }}
         />
-        <div ref={listRef} style={{ maxHeight: 380, overflowY: "auto", padding: "var(--s-1)" }}>
+        <div ref={listRef} style={{ maxHeight: 320, overflowY: "auto", padding: "var(--s-1)" }}>
           {rows.length === 0 && (
             <div style={{ padding: "var(--s-4)", color: "var(--ink-faint)", fontSize: "var(--text-sm)" }}>
               {mode === "files" && !workspace ? "Open a workspace first." : "No matches."}
@@ -162,7 +162,8 @@ export function Palette({
                 display: "flex",
                 alignItems: "center",
                 gap: "var(--s-2)",
-                padding: "7px var(--s-3)",
+                padding: "5px 10px",
+                fontSize: "var(--text-sm)",
                 borderRadius: "var(--r-control)",
                 background: i === index ? "var(--clay-wash)" : "transparent",
                 cursor: "default",

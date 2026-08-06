@@ -1,23 +1,7 @@
+import { ButterflyMark } from "./DotMatrix";
 import { FileIcon } from "../icons/fileIcon";
 import { useLayout, type Tab } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
-
-function ChatGlyph() {
-  // Two dots and a stroke — the same dot vocabulary as the state indicator.
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden style={{ flexShrink: 0 }}>
-      <circle cx="4" cy="5" r="1.6" fill="var(--clay)" />
-      <circle cx="8.5" cy="5" r="1.6" fill="var(--clay)" />
-      <path
-        d="M2 9.5h8.5"
-        stroke="var(--clay)"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        opacity="0.5"
-      />
-    </svg>
-  );
-}
 
 function TabButton({ tab }: { tab: Tab }) {
   const active = useLayout((s) => s.activeTabId === tab.id);
@@ -64,7 +48,7 @@ function TabButton({ tab }: { tab: Tab }) {
       }}
     >
       {tab.kind === "chat" ? (
-        <ChatGlyph />
+        <ButterflyMark size={14} />
       ) : tab.kind === "file" ? (
         <FileIcon name={name ?? ""} />
       ) : null}

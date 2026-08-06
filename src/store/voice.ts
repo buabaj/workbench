@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
-import { ipc, type TranscriptResult, type VoiceCapability } from "../ipc/client";
+import { formatError, ipc, type TranscriptResult, type VoiceCapability } from "../ipc/client";
 
 export type VoicePhase =
   | "idle"
@@ -16,6 +16,8 @@ interface VoiceStore {
   phase: VoicePhase;
   elapsedMs: number;
   level: number;
+  /** Rolling input levels feeding the dot waveform. */
+  levels: number[];
   error: string | null;
   capability: VoiceCapability | null;
 
@@ -80,6 +82,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
   phase: "idle",
   elapsedMs: 0,
   level: 0,
+  levels: [],
   error: null,
   capability: null,
 
@@ -106,10 +109,9 @@ export const useVoice = create<VoiceStore>((set, get) => ({
         // Insert as editable text. There is deliberately no path from here to
         // submitting the task — the user edits and sends it themselves.
         onTranscript(result.text);
-        set({ phase: "idle", elapsedMs: 0, error: null });
+        set({ phase: "idle", elapsedMs: 0, error: null, levels: [] });
       } catch (e) {
-        const detail = (e as { message?: string; detail?: unknown })?.detail ?? e;
-        set({ phase: "error", error: String(detail) });
+        set({ phase: "error", error: formatError(e) });
       }
       return;
     }
@@ -154,7 +156,9 @@ export const useVoice = create<VoiceStore>((set, get) => ({
         for (let i = 0; i < samples.length; i += 16) {
           peak = Math.max(peak, Math.abs(samples[i]));
         }
-        useVoice.setState({ level: peak / 32768 });
+        const level = peak / 32768;
+        const prev = useVoice.getState().levels;
+        useVoice.setState({ level, levels: [...prev.slice(-40), level] });
       };
 
       source.connect(node);
@@ -167,7 +171,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
         error:
           name === "NotAllowedError"
             ? "Microphone access denied. Enable it in System Settings → Privacy & Security → Microphone."
-            : String((e as { detail?: unknown })?.detail ?? e),
+            : formatError(e),
       });
     }
   },
@@ -176,6 +180,6 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     const sessionId = live?.sessionId;
     teardown();
     if (sessionId) await ipc.voiceCancel(sessionId).catch(() => {});
-    set({ phase: "idle", elapsedMs: 0, level: 0 });
+    set({ phase: "idle", elapsedMs: 0, level: 0, levels: [] });
   },
 }));
