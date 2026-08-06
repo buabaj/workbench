@@ -7,15 +7,17 @@ pub mod fsx;
 pub mod profiles;
 pub mod secret;
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
 
+use agent::supervisor::Supervisor;
 use creds::keychain::Keychain;
 
 pub struct AppState {
-    pub db: Mutex<rusqlite::Connection>,
-    pub keychain: Box<dyn Keychain>,
+    pub db: Arc<Mutex<rusqlite::Connection>>,
+    pub keychain: Arc<dyn Keychain>,
+    pub supervisor: Arc<Supervisor>,
 }
 
 #[derive(serde::Serialize)]
@@ -60,8 +62,9 @@ pub fn run() {
             }
 
             app.manage(AppState {
-                db: Mutex::new(conn),
-                keychain: Box::new(creds::keychain::MacKeychain),
+                db: Arc::new(Mutex::new(conn)),
+                keychain: Arc::new(creds::keychain::MacKeychain),
+                supervisor: Arc::new(Supervisor::default()),
             });
             Ok(())
         })
@@ -88,7 +91,20 @@ pub fn run() {
             commands::workspace::file_write,
             commands::agent_setup::agent_preflight,
             commands::agent_setup::agent_set_executable_path,
+            commands::tasks::agent_start_task,
+            commands::tasks::agent_stop_task,
+            commands::tasks::agent_send,
+            commands::tasks::agent_subscribe,
+            commands::tasks::tasks_recent,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                // Best-effort child cleanup; kill_on_drop is the backstop.
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.supervisor.kill_all();
+                }
+            }
+        });
 }

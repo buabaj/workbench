@@ -1,9 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { AgentActivity } from "./components/AgentActivity";
 import { DotMatrix } from "./components/DotMatrix";
 import { EditorPane } from "./components/EditorPane";
 import { FileTree } from "./components/FileTree";
 import { PreflightPanel } from "./components/Preflight";
+import { SettingsSheet } from "./components/SettingsSheet";
 import { onFsChanged } from "./ipc/client";
+import { useTasks } from "./store/tasks";
 import { useWorkspace } from "./store/workspace";
 
 export default function App() {
@@ -15,6 +18,15 @@ export default function App() {
   const refreshPreflight = useWorkspace((s) => s.refreshPreflight);
   const handleFsChanged = useWorkspace((s) => s.handleFsChanged);
 
+  const taskStatus = useTasks((s) => s.status);
+  const resolvedProfile = useTasks((s) => s.resolvedProfile);
+  const profileMissing = useTasks((s) => s.profileMissing);
+  const refreshProfile = useTasks((s) => s.refreshProfile);
+  const runTask = useTasks((s) => s.runTask);
+
+  const [prompt, setPrompt] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   useEffect(() => {
     void refreshPreflight();
     const un = onFsChanged(handleFsChanged);
@@ -22,6 +34,20 @@ export default function App() {
       void un.then((f) => f());
     };
   }, [refreshPreflight, handleFsChanged]);
+
+  useEffect(() => {
+    void refreshProfile(workspace?.id ?? null);
+  }, [workspace?.id, refreshProfile]);
+
+  const busy = taskStatus === "starting" || taskStatus === "running";
+  const canRun = Boolean(workspace && resolvedProfile && prompt.trim() && !busy);
+
+  const submit = () => {
+    if (!canRun || !workspace) return;
+    const p = prompt.trim();
+    setPrompt("");
+    void runTask(workspace.id, p);
+  };
 
   return (
     <div className="app">
@@ -63,7 +89,7 @@ export default function App() {
           <div className="canvas-empty">
             <DotMatrix state="awaiting-input" />
             {workspace ? (
-              <div className="serif">Select a file from the rail.</div>
+              <div className="serif">Select a file, or describe a task below.</div>
             ) : (
               <>
                 <div className="serif">Open a workspace to begin.</div>
@@ -79,20 +105,12 @@ export default function App() {
 
       <aside className="inspector">
         <div className="panel">
-          <h3>CONTEXT SHELF</h3>
-          <div className="panel-empty">Select text in a document or file, then add it as context.</div>
+          <h3>AGENT ACTIVITY</h3>
+          <AgentActivity />
         </div>
         <div className="panel">
-          <h3>AGENT ACTIVITY</h3>
-          <div className="panel-empty">
-            <div className="state-row">
-              <DotMatrix state="awaiting-input" />
-              <div>
-                <div className="state-label">AWAITING INPUT</div>
-                <div className="state-sub">no agent running</div>
-              </div>
-            </div>
-          </div>
+          <h3>CONTEXT SHELF</h3>
+          <div className="panel-empty">Select text in a document or file, then add it as context.</div>
         </div>
         <div className="panel">
           <h3>LINKED EVIDENCE</h3>
@@ -102,21 +120,53 @@ export default function App() {
 
       <footer className="composer">
         <div className="composer-meta">
-          <span className="chip">
-            <b>no profile</b> · configure in settings
+          <span
+            className="chip"
+            style={{ cursor: "pointer" }}
+            onClick={() => setSettingsOpen(true)}
+            title="Configure providers"
+          >
+            {resolvedProfile ? (
+              <>
+                <b>{resolvedProfile.profile.label}</b>
+                {resolvedProfile.profile.modelId ? ` · ${resolvedProfile.profile.modelId}` : ""}
+              </>
+            ) : (
+              <b>{profileMissing ? "set up a provider…" : "resolving profile…"}</b>
+            )}
           </span>
-          <span className="chip origin">app default</span>
+          {resolvedProfile && (
+            <span className="chip origin">{resolvedProfile.origin} default</span>
+          )}
         </div>
         <div className="composer-row">
-          <input className="composer-input" placeholder="Describe a task for the agent…" disabled />
-          <button className="btn" disabled>
+          <input
+            className="composer-input"
+            placeholder={
+              workspace
+                ? "Describe a task for the agent…"
+                : "Open a workspace to run tasks"
+            }
+            value={prompt}
+            disabled={!workspace || busy}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+          />
+          <button className="btn" disabled title="Voice input arrives in a later phase">
             ◉ voice
           </button>
-          <button className="btn primary" disabled>
-            Run task
+          <button className="btn primary" disabled={!canRun} onClick={submit}>
+            {busy ? "Running…" : "Run task"}
           </button>
         </div>
       </footer>
+
+      {settingsOpen && <SettingsSheet onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

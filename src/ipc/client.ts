@@ -73,6 +73,68 @@ export interface AppErrorShape {
 
 // ── commands ────────────────────────────────────────────────────────────────
 
+// ── credentials / profiles / tasks ─────────────────────────────────────────
+
+export interface CredentialProfileView {
+  id: string;
+  label: string;
+  authKind: "api_key" | "oauth_host" | "custom_provider";
+  providerSlug: string | null;
+  customProviderId: string | null;
+  scope: string;
+  keyFingerprint: string | null;
+  hasSecret: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface HostAuthSummary {
+  providerSlug: string;
+  authType: string;
+  isOauth: boolean;
+  isAmbient: boolean;
+}
+
+export interface AgentProfileView {
+  id: string;
+  label: string;
+  credentialProfileId: string;
+  modelId: string | null;
+  thinkingLevel: string | null;
+}
+
+export interface ResolvedAgentProfile {
+  profile: AgentProfileView;
+  origin: "task" | "workspace" | "app";
+}
+
+export interface TaskView {
+  id: string;
+  workspaceId: string;
+  status: string;
+  promptText: string;
+  provider: string | null;
+  model: string | null;
+  profileOrigin: string | null;
+  createdAt: number;
+}
+
+/** One item from the agent stream. Payload shapes are passthrough — see the
+ * single normalization site in store/tasks.ts. */
+export type StreamItem =
+  | ({ kind: "event"; type: string } & Record<string, unknown>)
+  | { kind: "unknown"; raw_type: string; raw: unknown }
+  | { kind: "protocol_error"; reason: string; sample?: string }
+  | { kind: "orphan_response"; command: string; success: boolean }
+  | { kind: "oversize"; dropped_bytes: number }
+  | { kind: "process_exited"; code: number | null; signal: number | null };
+
+export interface TaskStreamEnvelope {
+  taskId: string;
+  seq: number;
+  item: StreamItem;
+}
+
 export const ipc = {
   workspacePick: () => invoke<WorkspaceView | null>("workspace_pick"),
   workspaceOpen: (path: string) => invoke<WorkspaceView>("workspace_open", { path }),
@@ -90,6 +152,35 @@ export const ipc = {
     expectedHash: string | null,
   ) => invoke<WriteOutcome>("file_write", { workspaceId, path, text, expectedHash }),
   agentPreflight: () => invoke<PreflightReport>("agent_preflight"),
+
+  credsList: () => invoke<CredentialProfileView[]>("creds_list"),
+  credsAdd: (input: {
+    label: string;
+    authKind: "api_key" | "oauth_host" | "custom_provider";
+    providerSlug?: string;
+    customProviderId?: string;
+    scope?: string;
+    apiKey?: string;
+  }) => invoke<CredentialProfileView>("creds_add", { input }),
+  credsDiscoverHostAuth: () => invoke<HostAuthSummary[]>("creds_discover_host_auth"),
+  agentProfilesList: () => invoke<AgentProfileView[]>("agent_profiles_list"),
+  agentProfilesUpsert: (input: {
+    id?: string;
+    label: string;
+    credentialProfileId: string;
+    modelId?: string;
+    thinkingLevel?: string;
+  }) => invoke<AgentProfileView>("agent_profiles_upsert", { input }),
+  profilesSetDefault: (workspaceId: string | null, profileId: string | null) =>
+    invoke<void>("profiles_set_default", { workspaceId, profileId }),
+  profilesResolve: (workspaceId: string | null, taskOverride: string | null) =>
+    invoke<ResolvedAgentProfile>("profiles_resolve", { workspaceId, taskOverride }),
+
+  agentStopTask: (taskId: string, force: boolean) =>
+    invoke<void>("agent_stop_task", { taskId, force }),
+  agentSend: (taskId: string, command: "prompt" | "steer" | "follow_up", message: string) =>
+    invoke<void>("agent_send", { taskId, command, message }),
+  tasksRecent: (workspaceId: string) => invoke<TaskView[]>("tasks_recent", { workspaceId }),
 };
 
 export function onFsChanged(handler: (e: FsChanged) => void): Promise<UnlistenFn> {

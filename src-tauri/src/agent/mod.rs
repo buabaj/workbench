@@ -13,3 +13,4 @@ pub mod oauth_discovery;
 pub mod preflight;
 pub mod protocol;
 pub mod spawn;
+pub mod supervisor;

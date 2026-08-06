@@ -19,7 +19,8 @@ use super::protocol::{parse_frame, AgentEvent, Frame, ResponseEnvelope};
 
 const STDERR_TAIL_CAP: usize = 256 * 1024;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum StreamItem {
     Event(AgentEvent),
     Unknown { raw_type: String, raw: Value },
@@ -31,7 +32,8 @@ pub enum StreamItem {
     ProcessExited { code: Option<i32>, signal: Option<i32> },
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StreamEnvelope {
     pub seq: u64,
     pub item: StreamItem,
@@ -230,7 +232,7 @@ async fn reader_task(
 ) {
     let mut framer = LineFramer::default();
     let mut seq: u64 = 0;
-    let mut emit = |item: StreamItem, seq: &mut u64| {
+    let emit = |item: StreamItem, seq: &mut u64| {
         *seq += 1;
         let _ = stream_tx.send(StreamEnvelope { seq: *seq, item });
     };
