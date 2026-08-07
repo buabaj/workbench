@@ -202,7 +202,7 @@ export function EditorPane() {
   const markdown = isMd(active);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       {phase === "conflict" && <ConflictBanner workspaceId={workspace.id} relPath={active} />}
       {pendingAnnotation && (
         <AnnotationComposer

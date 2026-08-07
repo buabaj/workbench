@@ -12,3 +12,6 @@ src-tauri/gen/schemas/
 .env
 .env.*
 !.env.example
+
+# Temporary PDF render trace (see PdfView).
+.workbench-pdf-debug.log

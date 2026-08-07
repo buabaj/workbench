@@ -3,6 +3,7 @@ import { MessageSquarePlus, PenLine, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { ipc } from "../ipc/client";
 import { useComposer } from "../store/composer";
 import { useLayout } from "../store/layout";
 
@@ -29,6 +30,31 @@ const RENDER_MARGIN = "600px";
 
 /** Rendered without waiting to be observed, so the reader is never blank. */
 const EAGER_PAGES = 3;
+
+/**
+ * Trace to a file in the workspace.
+ *
+ * TEMPORARY. Four rounds of this bug have produced a page that looks the same
+ * whether pdf.js never ran, ran and painted nothing, or painted correctly into
+ * something invisible — and reading a badge off the screen depends on the badge
+ * itself rendering, which is one of the things in question. A file does not.
+ */
+let traceBuffer: string[] = [];
+let traceWorkspace: string | null = null;
+let traceTimer: number | undefined;
+
+function trace(line: string): void {
+  traceBuffer.push(`${new Date().toISOString().slice(11, 23)} ${line}`);
+  if (!traceWorkspace) return;
+  window.clearTimeout(traceTimer);
+  traceTimer = window.setTimeout(() => {
+    const ws = traceWorkspace;
+    if (!ws) return;
+    void ipc
+      .fileWrite(ws, ".workbench-pdf-debug.log", traceBuffer.join("\n") + "\n", null)
+      .catch(() => {});
+  }, 300);
+}
 
 /**
  * Non-white pixels in a sample of the canvas.
@@ -126,12 +152,16 @@ function Page({
     let cancelled = false;
     let task: pdfjs.RenderTask | null = null;
 
+    trace(`p${pageNumber} render effect ran (visible=${visible})`);
     void (async () => {
       const page = await doc.getPage(pageNumber);
       if (cancelled) return;
       const viewport = page.getViewport({ scale });
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas) {
+        trace(`p${pageNumber} ABORT: canvas ref is null`);
+        return;
+      }
 
       // Render at device resolution and scale down in CSS, or text is soft on
       // a Retina display. The dpr goes through `transform` rather than a
@@ -156,6 +186,7 @@ function Page({
         // else has to be shown: swallowing it leaves a blank white page and
         // no way to tell why.
         const msg = e instanceof Error ? e.message : String(e);
+        trace(`p${pageNumber} RENDER FAILED: ${msg}`);
         if (!cancelled && !/cancel/i.test(msg)) setRenderErr(msg);
         return;
       }
@@ -169,6 +200,12 @@ function Page({
       // and only the second is left. The badge is unconditional so the answer
       // arrives whether or not the guess is right this time.
       const ink = countInk(canvas);
+      trace(
+        `p${pageNumber} rendered ink=${ink} canvas=${canvas.width}x${canvas.height} ` +
+          `css=${canvas.clientWidth}x${canvas.clientHeight} ` +
+          `vp=${Math.round(viewport.width)}x${Math.round(viewport.height)} dpr=${dpr} ` +
+          `hostCss=${hostRef.current?.clientWidth}x${hostRef.current?.clientHeight}`,
+      );
       setStats({
         ink,
         cw: canvas.width,
@@ -310,6 +347,9 @@ export function PdfView({
     let task: pdfjs.PDFDocumentLoadingTask | null = null;
     setDoc(null);
     setErr(null);
+    traceWorkspace = workspaceId;
+    traceBuffer = [];
+    trace(`mount relPath=${relPath} dpr=${window.devicePixelRatio} workerSrc=${workerUrl}`);
 
     // A viewer that renders nothing and says nothing is indistinguishable from
     // a broken one, so loading is bounded and failure is reported.
@@ -321,16 +361,21 @@ export function PdfView({
       try {
         const bytes = await invoke<ArrayBuffer>("file_read_bytes", { workspaceId, path: relPath });
         // pdf.js takes ownership of the buffer it is given, so it gets a copy.
+        trace(`bytes received: ${(bytes as ArrayBuffer)?.byteLength ?? "not an ArrayBuffer"}`);
         const data = new Uint8Array(bytes.slice(0));
+        trace(`data length=${data.length} head=${Array.from(data.slice(0, 5)).join(",")}`);
         task = pdfjs.getDocument({ data });
         const loaded = await task.promise;
         if (cancelled) return;
         window.clearTimeout(timer);
+        trace(`doc loaded pages=${loaded.numPages}`);
         setDoc(loaded);
       } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        trace(`LOAD FAILED: ${msg}`);
         if (!cancelled) {
           window.clearTimeout(timer);
-          setErr(e instanceof Error ? e.message : String(e));
+          setErr(msg);
         }
       }
     })();
@@ -360,7 +405,20 @@ export function PdfView({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, position: "relative" }}>
+    // `flex: 1` rather than `height: 100%`: as a flex item in a column whose
+    // height is not definite, a percentage height resolves to auto and the
+    // whole reader collapses to nothing — which looks exactly like a blank
+    // page and is not one.
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        flex: "1 1 auto",
+        minHeight: 0,
+        height: "100%",
+        position: "relative",
+      }}
+    >
       <div
         style={{
           display: "flex",
