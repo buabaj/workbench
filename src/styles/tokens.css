@@ -72,6 +72,11 @@
        · text on a clay fill → --ink (ivory on clay is only 2.96:1, which is
          exactly why Anthropic's primary button is ink-filled, not clay) */
   --clay-text: #ab4727;
+  /* A rule that reads as a seam, not a stripe. Used where a divider is also a
+     drag handle, so it hints at the accent without becoming a line of colour;
+     it strengthens on hover, where the hint becomes an affordance. */
+  --rule-clay: #d9775733;
+  --rule-clay-hover: #d9775780;
 
   /* ── functional ───────────────────────────────────────────────────────── */
   --border: #1414131a;      /* 10% ink — hairlines do the separating */
@@ -192,6 +197,8 @@
   /* On dark, clay itself clears 4.5:1 — no darker text variant needed, so the
      token simply points at the accent. */
   --clay-text: #e08b6e;
+  --rule-clay: #d977573d;
+  --rule-clay-hover: #d977578c;
 
   --border: #faf9f51a;
   --border-strong: #faf9f533;
@@ -244,6 +251,8 @@
     /* On dark, clay itself clears 4.5:1 — no darker text variant needed, so the
        token simply points at the accent. */
     --clay-text: #e08b6e;
+  --rule-clay: #d977573d;
+  --rule-clay-hover: #d977578c;
   
     --border: #faf9f51a;
     --border-strong: #faf9f533;

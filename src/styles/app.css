@@ -473,3 +473,15 @@ body {
 .md th, .md td { border: 1px solid var(--border); padding: 5px var(--s-3); text-align: left; }
 .md th { background: var(--surface); font-weight: 600; }
 .md img { max-width: 100%; border-radius: var(--r-card); }
+
+/* Divider that is also a drag handle. Faint clay so the seam is visible
+   without reading as a coloured stripe; brighter on hover and focus, where
+   the hint needs to become an affordance. */
+.rule-drag {
+  background: var(--rule-clay);
+  transition: background var(--motion-fast, 120ms) ease;
+}
+.rule-drag:hover,
+.rule-drag:focus-visible {
+  background: var(--rule-clay-hover);
+}

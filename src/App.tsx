@@ -12,6 +12,7 @@ import { SessionsPanel } from "./components/SessionsPanel";
 import { SettingsView } from "./components/SettingsView";
 import { applyMention, mentionQueryAt } from "./chat/mentions";
 import { MentionMenu } from "./components/MentionMenu";
+import { SearchPanel } from "./components/SearchPanel";
 import { SlashMenu } from "./components/SlashMenu";
 import { TerminalDock } from "./terminal/TerminalDock";
 import { TabStrip } from "./components/TabStrip";
@@ -67,6 +68,7 @@ export default function App() {
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
   const [commandNote, setCommandNote] = useState<string | null>(null);
+  const [railTab, setRailTab] = useState<"files" | "search">("files");
   const [terminalOpen, setTerminalOpen] = useState(false);
   /** Mounted — and so still running — independently of being visible. */
   const [terminalAlive, setTerminalAlive] = useState(false);
@@ -153,6 +155,10 @@ export default function App() {
       } else if (e.shiftKey && (k === "]" || k === "[")) {
         e.preventDefault();
         cycleTab(k === "]" ? 1 : -1);
+      } else if (e.shiftKey && k === "f") {
+        e.preventDefault();
+        setRailTab("search");
+        if (!useLayout.getState().railOpen) toggleRail();
       } else if (e.shiftKey && k === "v") {
         e.preventDefault();
         void toggleVoice(insertTranscript);
@@ -308,8 +314,22 @@ export default function App() {
           <ErrorBoundary>
             {workspace ? (
               <div className="rail-section">
-                <h3>Files</h3>
-                <FileTree />
+                {/* Files and Search share the rail rather than stacking: both
+                    want the full height, and stacked they would each get half. */}
+                <div style={{ display: "flex", gap: 2, marginBottom: "var(--s-2)" }}>
+                  {(["files", "search"] as const).map((t) => (
+                    <button
+                      key={t}
+                      className={`btn ${railTab === t ? "primary" : "quiet"}`}
+                      style={{ fontSize: "var(--text-xs)", textTransform: "capitalize", padding: "3px 10px" }}
+                      aria-pressed={railTab === t}
+                      onClick={() => setRailTab(t)}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                {railTab === "files" ? <FileTree /> : <SearchPanel />}
               </div>
             ) : (
               <>
@@ -489,11 +509,11 @@ export default function App() {
                 else return;
                 e.preventDefault();
               }}
+              className="rule-drag"
               style={{
                 height: 5,
                 flexShrink: 0,
                 cursor: "row-resize",
-                background: "var(--border)",
                 display: terminalOpen ? undefined : "none",
               }}
             />

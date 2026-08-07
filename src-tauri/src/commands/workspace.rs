@@ -166,7 +166,7 @@ pub fn workspace_recent(state: State<'_, AppState>) -> Result<Vec<WorkspaceView>
     Ok(rows)
 }
 
-fn root_for<'a>(
+pub(crate) fn root_for<'a>(
     open: &'a OpenWorkspaces,
     workspace_id: &str,
 ) -> Result<WorkspaceRoot, AppError> {
@@ -221,6 +221,56 @@ pub fn file_write(
     let root = root_for(&open, &workspace_id)?;
     let p = root.resolve(&path, Intent::Write)?;
     Ok(ops::write(&p, &text, expected_hash.as_deref())?)
+}
+
+/// Create an empty file, failing if something is already there.
+///
+/// Never truncates: `file_write` is how you change a file's contents, and a
+/// "new file" that silently emptied an existing one would be a data-loss bug
+/// wearing a friendly name. Parent directories are created, so typing
+/// `src/api/handlers.rs` in one go works the way it does in an editor.
+#[tauri::command]
+pub fn file_create(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+    path: String,
+) -> Result<(), AppError> {
+    let root = root_for(&open, &workspace_id)?;
+    let p = root.resolve(&path, Intent::Write)?;
+    if p.abs().exists() {
+        return Err(AppError::Validation("that name is already taken".into()));
+    }
+    if let Some(parent) = p.abs().parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    // create_new: the existence check above races, this closes it.
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(p.abs())
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => {
+                AppError::Validation("that name is already taken".into())
+            }
+            _ => AppError::Io(e.to_string()),
+        })?;
+    Ok(())
+}
+
+/// Create a directory, including any missing parents.
+#[tauri::command]
+pub fn dir_create(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+    path: String,
+) -> Result<(), AppError> {
+    let root = root_for(&open, &workspace_id)?;
+    let p = root.resolve(&path, Intent::Write)?;
+    if p.abs().exists() {
+        return Err(AppError::Validation("that name is already taken".into()));
+    }
+    std::fs::create_dir_all(p.abs())?;
+    Ok(())
 }
 
 /// Cap the index so a pathological tree can't exhaust memory. 20k paths is far

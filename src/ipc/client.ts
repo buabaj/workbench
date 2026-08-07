@@ -10,6 +10,32 @@ export interface WorkspaceView {
   kind: "git" | "plain";
 }
 
+export interface SearchQuery {
+  pattern: string;
+  caseSensitive: boolean;
+  wholeWord: boolean;
+  regex: boolean;
+}
+
+export interface SearchMatch {
+  relPath: string;
+  line: number;
+  text: string;
+  start: number;
+  end: number;
+}
+
+export interface SearchProgress {
+  matches: SearchMatch[];
+  done: boolean;
+  truncated: boolean;
+}
+
+export interface ReplaceOutcome {
+  filesChanged: number;
+  replacements: number;
+}
+
 export interface TreeNode {
   name: string;
   relPath: string;
@@ -269,6 +295,16 @@ export const ipc = {
     text: string,
     expectedHash: string | null,
   ) => invoke<WriteOutcome>("file_write", { workspaceId, path, text, expectedHash }),
+  searchReplace: (
+    workspaceId: string,
+    query: SearchQuery,
+    replacement: string,
+    relPaths: string[],
+  ) => invoke<ReplaceOutcome>("search_replace", { workspaceId, query, replacement, relPaths }),
+  fileCreate: (workspaceId: string, path: string) =>
+    invoke<void>("file_create", { workspaceId, path }),
+  dirCreate: (workspaceId: string, path: string) =>
+    invoke<void>("dir_create", { workspaceId, path }),
   agentPreflight: () => invoke<PreflightReport>("agent_preflight"),
   agentListModels: (credentialProfileId: string) =>
     invoke<AgentModel[]>("agent_list_models", { credentialProfileId }),

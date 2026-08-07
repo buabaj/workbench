@@ -1,8 +1,9 @@
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, FilePlus, FolderPlus } from "lucide-react";
 import { useLayout } from "../store/layout";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { useWorkspace } from "../store/workspace";
 import { FileIcon, FolderIcon } from "../icons/fileIcon";
-import type { TreeNode } from "../ipc/client";
+import { formatError, ipc, type TreeNode } from "../ipc/client";
 
 function Row({ node, depth }: { node: TreeNode; depth: number }) {
   const expanded = useWorkspace((s) => s.expanded[node.relPath] ?? false);
@@ -106,12 +107,114 @@ function Children({ subpath, depth }: { subpath: string; depth: number }) {
   );
 }
 
+/**
+ * Inline create row.
+ *
+ * A row in the tree rather than a modal: you are naming a thing in a place,
+ * and the place should stay visible while you do it. A path with slashes is
+ * accepted — `src/api/handlers.rs` creates the parents too, the way typing a
+ * path into an editor's new-file prompt does.
+ */
+function CreateRow({
+  kind,
+  onDone,
+}: {
+  kind: "file" | "dir";
+  onDone: () => void;
+}) {
+  const workspace = useWorkspace((s) => s.workspace);
+  const loadChildren = useWorkspace((s) => s.loadChildren);
+  const openFile = useWorkspace((s) => s.openFile);
+  const [name, setName] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => ref.current?.focus(), []);
+
+  const commit = async () => {
+    const path = name.trim().replace(/^\/+/, "");
+    if (!workspace || !path) return onDone();
+    try {
+      if (kind === "file") {
+        await ipc.fileCreate(workspace.id, path);
+      } else {
+        await ipc.dirCreate(workspace.id, path);
+      }
+      // Refresh the level the thing landed in, not just the root.
+      const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+      await loadChildren("");
+      if (parent) await loadChildren(parent).catch(() => {});
+      if (kind === "file") openFile(path);
+      onDone();
+    } catch (e) {
+      setErr(formatError(e));
+    }
+  };
+
+  return (
+    <div style={{ padding: "2px 8px" }}>
+      <input
+        ref={ref}
+        className="field"
+        style={{ fontSize: "var(--text-sm)", padding: "3px 6px" }}
+        placeholder={kind === "file" ? "path/name.ext" : "folder name"}
+        aria-label={kind === "file" ? "New file path" : "New folder name"}
+        value={name}
+        onChange={(e) => {
+          setName(e.target.value);
+          setErr(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void commit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onDone();
+          }
+        }}
+        // Clicking away cancels rather than silently creating something.
+        onBlur={() => !err && onDone()}
+      />
+      {err && (
+        <div role="alert" style={{ color: "var(--error)", fontSize: "var(--text-xs)", padding: "2px 2px 0" }}>
+          {err}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FileTree() {
   const workspace = useWorkspace((s) => s.workspace);
+  const [creating, setCreating] = useState<"file" | "dir" | null>(null);
   if (!workspace) return null;
   return (
-    <div role="tree" aria-label="Workspace files">
-      <Children subpath="" depth={0} />
+    <div>
+      <div style={{ display: "flex", gap: 2, padding: "0 6px 4px", justifyContent: "flex-end" }}>
+        <button
+          className="btn icon"
+          aria-label="New file"
+          title="New file"
+          onClick={() => setCreating("file")}
+          style={{ padding: 3, color: "var(--ink-faint)" }}
+        >
+          <FilePlus size={13} strokeWidth={1.7} />
+        </button>
+        <button
+          className="btn icon"
+          aria-label="New folder"
+          title="New folder"
+          onClick={() => setCreating("dir")}
+          style={{ padding: 3, color: "var(--ink-faint)" }}
+        >
+          <FolderPlus size={13} strokeWidth={1.7} />
+        </button>
+      </div>
+      {creating && <CreateRow kind={creating} onDone={() => setCreating(null)} />}
+      <div role="tree" aria-label="Workspace files">
+        <Children subpath="" depth={0} />
+      </div>
     </div>
   );
 }

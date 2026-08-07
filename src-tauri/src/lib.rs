@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod pty;
+pub mod search;
 pub mod anchors;
 pub mod appai;
 pub mod commands;
@@ -102,6 +103,8 @@ pub fn run() {
             commands::workspace::file_read,
             commands::workspace::file_stat,
             commands::workspace::file_write,
+            commands::workspace::file_create,
+            commands::workspace::dir_create,
             commands::workspace::workspace_index,
             commands::workspace::workspace_setting_get,
             commands::workspace::workspace_setting_set,
@@ -119,6 +122,8 @@ pub fn run() {
             commands::tasks::chat_delete_session,
             commands::tasks::agent_resume_task,
             commands::tasks::chat_title,
+            commands::search::search_run,
+            commands::search::search_replace,
             commands::pty::pty_open,
             commands::pty::pty_write,
             commands::pty::pty_resize,
