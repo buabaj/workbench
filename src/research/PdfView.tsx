@@ -80,6 +80,75 @@ function countInk(canvas: HTMLCanvasElement): number {
   }
 }
 
+/**
+ * Position the selectable text over a rendered page.
+ *
+ * Written here rather than using pdf.js's own `TextLayer`, which threw
+ * "undefined is not a function" inside its render loop on this WebKit — the
+ * same class of engine-support problem that stopped the canvas rendering. The
+ * maths is short and standard, and doing it here means the one thing that
+ * makes a PDF quotable does not depend on a DOM helper's assumptions.
+ *
+ * Each item carries a PDF-space transform. Composed with the viewport's, it
+ * gives the glyph run's position and size on screen; the span is then squeezed
+ * horizontally to match the run's measured width, so selection follows the
+ * real characters rather than whatever the fallback font would do.
+ */
+function buildTextLayer(
+  host: HTMLDivElement,
+  content: { items: unknown[] },
+  viewport: { transform: number[]; width: number; height: number },
+): void {
+  host.replaceChildren();
+  const frag = document.createDocumentFragment();
+
+  for (const raw of content.items) {
+    const item = raw as {
+      str?: string;
+      transform?: number[];
+      width?: number;
+      height?: number;
+      fontName?: string;
+    };
+    // Marked-content items have no `str`; they carry structure, not text.
+    if (typeof item.str !== "string" || item.str.length === 0) continue;
+    if (!item.transform) continue;
+
+    const tx = pdfjs.Util.transform(viewport.transform, item.transform);
+    // The vertical scale of the composed matrix is the on-screen font size.
+    const fontHeight = Math.hypot(tx[2], tx[3]);
+    if (fontHeight <= 0) continue;
+
+    const span = document.createElement("span");
+    span.textContent = item.str;
+    span.style.position = "absolute";
+    span.style.whiteSpace = "pre";
+    span.style.transformOrigin = "0% 0%";
+    span.style.left = `${tx[4]}px`;
+    // tx[5] is the baseline; the box starts a font-height above it.
+    span.style.top = `${tx[5] - fontHeight}px`;
+    span.style.fontSize = `${fontHeight}px`;
+    span.style.fontFamily = "sans-serif";
+    frag.append(span);
+  }
+  host.append(frag);
+
+  // Match each span's rendered width to the run's real width, so the selection
+  // rectangle lands on the glyphs beneath rather than drifting along the line.
+  const items = content.items as Array<{ str?: string; width?: number; transform?: number[] }>;
+  let i = 0;
+  for (const el of Array.from(host.children) as HTMLElement[]) {
+    while (i < items.length && (!items[i].str || !items[i].transform)) i++;
+    const item = items[i++];
+    if (!item?.width) continue;
+    const target = Math.abs(item.width) * Math.hypot(viewport.transform[0], viewport.transform[1]);
+    const actual = el.getBoundingClientRect().width;
+    if (actual > 0 && target > 0) {
+      el.style.transform = `scaleX(${target / actual})`;
+    }
+  }
+}
+
 /** Loading must not hang silently: a black rectangle is not a state. */
 const LOAD_TIMEOUT_MS = 30_000;
 
@@ -206,19 +275,9 @@ function Page({
       try {
         const textHost = textRef.current;
         if (textHost) {
-          textHost.replaceChildren();
-          // pdf.js positions every span with `calc(var(--total-scale-factor) *
-          // Npx)` and does NOT set that variable — the host does, as its own
-          // viewer does. Without it the spans collapse and there is nothing to
-          // select, which is exactly how this looked.
-          textHost.style.setProperty("--scale-factor", String(viewport.scale));
-          textHost.style.setProperty("--total-scale-factor", String(viewport.scale));
-          const layer = new pdfjs.TextLayer({
-            textContentSource: await page.getTextContent(),
-            container: textHost,
-            viewport,
-          });
-          await layer.render();
+          const content = await page.getTextContent();
+          if (cancelled) return;
+          buildTextLayer(textHost, content, viewport);
           trace(`p${pageNumber} text layer: ${textHost.childElementCount} spans`);
         }
       } catch (e) {
