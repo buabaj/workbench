@@ -103,6 +103,8 @@ pub fn run() {
             commands::workspace::file_read,
             commands::workspace::file_stat,
             commands::workspace::file_write,
+            commands::workspace::worktree_changes,
+            commands::workspace::worktree_patch,
             commands::workspace::file_create,
             commands::workspace::dir_create,
             commands::workspace::workspace_index,

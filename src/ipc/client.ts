@@ -10,6 +10,16 @@ export interface WorkspaceView {
   kind: "git" | "plain";
 }
 
+export interface WorktreeChange {
+  relPath: string;
+  oldPath: string | null;
+  status: "added" | "modified" | "deleted" | "renamed" | "type_changed";
+  insertions: number;
+  deletions: number;
+  isBinary: boolean;
+  untracked: boolean;
+}
+
 export interface SearchQuery {
   pattern: string;
   caseSensitive: boolean;
@@ -301,6 +311,10 @@ export const ipc = {
     replacement: string,
     relPaths: string[],
   ) => invoke<ReplaceOutcome>("search_replace", { workspaceId, query, replacement, relPaths }),
+  worktreeChanges: (workspaceId: string) =>
+    invoke<WorktreeChange[]>("worktree_changes", { workspaceId }),
+  worktreePatch: (workspaceId: string, relPath: string) =>
+    invoke<string>("worktree_patch", { workspaceId, relPath }),
   fileCreate: (workspaceId: string, path: string) =>
     invoke<void>("file_create", { workspaceId, path }),
   dirCreate: (workspaceId: string, path: string) =>

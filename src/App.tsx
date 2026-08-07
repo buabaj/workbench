@@ -12,6 +12,7 @@ import { SessionsPanel } from "./components/SessionsPanel";
 import { SettingsView } from "./components/SettingsView";
 import { applyMention, mentionQueryAt } from "./chat/mentions";
 import { MentionMenu } from "./components/MentionMenu";
+import { ChangesPanel } from "./components/ChangesPanel";
 import { SearchPanel } from "./components/SearchPanel";
 import { SlashMenu } from "./components/SlashMenu";
 import { TerminalDock } from "./terminal/TerminalDock";
@@ -68,7 +69,7 @@ export default function App() {
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
   const [commandNote, setCommandNote] = useState<string | null>(null);
-  const [railTab, setRailTab] = useState<"files" | "search">("files");
+  const [railTab, setRailTab] = useState<"files" | "search" | "changes">("files");
   const [terminalOpen, setTerminalOpen] = useState(false);
   /** Mounted — and so still running — independently of being visible. */
   const [terminalAlive, setTerminalAlive] = useState(false);
@@ -317,7 +318,7 @@ export default function App() {
                 {/* Files and Search share the rail rather than stacking: both
                     want the full height, and stacked they would each get half. */}
                 <div style={{ display: "flex", gap: 2, marginBottom: "var(--s-2)" }}>
-                  {(["files", "search"] as const).map((t) => (
+                  {(["files", "search", "changes"] as const).map((t) => (
                     <button
                       key={t}
                       className={`btn ${railTab === t ? "primary" : "quiet"}`}
@@ -329,7 +330,13 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                {railTab === "files" ? <FileTree /> : <SearchPanel />}
+                {railTab === "files" ? (
+                  <FileTree />
+                ) : railTab === "search" ? (
+                  <SearchPanel />
+                ) : (
+                  <ChangesPanel />
+                )}
               </div>
             ) : (
               <>

@@ -273,6 +273,42 @@ pub fn dir_create(
     Ok(())
 }
 
+/// Everything uncommitted in the workspace repository, right now.
+///
+/// Read-only by design: there is deliberately no stage or commit here. The
+/// user does that from the terminal, and a diff panel that could mutate the
+/// repository would be a far bigger promise than it appears.
+#[tauri::command]
+pub fn worktree_changes(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+) -> Result<Vec<crate::vcs::worktree::WorktreeChange>, AppError> {
+    let root = root_for(&open, &workspace_id)?;
+    Ok(crate::vcs::worktree::changes(root.real())?)
+}
+
+/// Unified patch for one uncommitted file.
+#[tauri::command]
+pub fn worktree_patch(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+    rel_path: String,
+) -> Result<String, AppError> {
+    let root = root_for(&open, &workspace_id)?;
+    // Through the guard even though this only reads: the path comes from the
+    // frontend, and a pathspec is still a path.
+    let p = root.resolve(&rel_path, Intent::Read);
+    let rel = match p {
+        Ok(_) => rel_path,
+        // A deleted file cannot be resolved, but its diff is exactly what the
+        // user wants to see, so fall back to the literal relative path after
+        // rejecting anything that tries to escape.
+        Err(_) if !rel_path.contains("..") && !rel_path.starts_with('/') => rel_path,
+        Err(e) => return Err(e.into()),
+    };
+    Ok(crate::vcs::worktree::patch(root.real(), &rel)?)
+}
+
 /// Cap the index so a pathological tree can't exhaust memory. 20k paths is far
 /// beyond what fuzzy-open stays useful at.
 const MAX_INDEXED: usize = 20_000;

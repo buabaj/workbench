@@ -13,6 +13,7 @@
 pub mod diff;
 pub mod restore;
 pub mod snapshot;
+pub mod worktree;
 
 use std::path::{Path, PathBuf};
 
