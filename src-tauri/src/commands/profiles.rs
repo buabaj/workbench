@@ -61,3 +61,25 @@ pub fn profiles_resolve(
         workspace_id.as_deref(),
     )?)
 }
+
+/// Point the agent profile that uses `credential_profile_id` at a model.
+///
+/// Model choice previously existed only when a credential was first added, and
+/// the list in Settings was not clickable, so a profile saved without one could
+/// never be corrected from the UI — it just kept auto-selecting.
+#[tauri::command]
+pub fn agent_profile_set_model(
+    state: State<'_, AppState>,
+    credential_profile_id: String,
+    model_id: String,
+) -> Result<(), AppError> {
+    let conn = state.db.lock().expect("db lock");
+    let changed = conn.execute(
+        "UPDATE agent_profiles SET model_id = ?1 WHERE credential_profile_id = ?2",
+        rusqlite::params![&model_id, &credential_profile_id],
+    )?;
+    if changed == 0 {
+        return Err(AppError::NotFound("agent profile for that credential".into()));
+    }
+    Ok(())
+}

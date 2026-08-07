@@ -204,6 +204,11 @@ export interface AgentModel {
   id: string;
   provider: string;
   name: string | null;
+  contextWindow: number;
+  reasoning: boolean;
+  outputCost: number | null;
+  /** What auto-selection would choose. */
+  recommended: boolean;
 }
 
 export interface AnchorSpec {
@@ -265,6 +270,8 @@ export const ipc = {
   agentPreflight: () => invoke<PreflightReport>("agent_preflight"),
   agentListModels: (credentialProfileId: string) =>
     invoke<AgentModel[]>("agent_list_models", { credentialProfileId }),
+  agentProfileSetModel: (credentialProfileId: string, modelId: string) =>
+    invoke<void>("agent_profile_set_model", { credentialProfileId, modelId }),
   workspaceIndex: (workspaceId: string, refresh: boolean) =>
     invoke<string[]>("workspace_index", { workspaceId, refresh }),
   workspaceSettingGet: (workspaceId: string, key: string) =>

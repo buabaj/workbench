@@ -187,6 +187,18 @@ pub async fn agent_start_task(
                               model = COALESCE(?3, model) WHERE id = ?4",
             rusqlite::params![outcome.session_id, outcome.session_path, outcome.model, task_id],
         )?;
+        // Write an auto-selected model back to the profile. Without this the
+        // choice was re-made on every launch and never shown anywhere, so the
+        // Agent panel said "No model configured" while the agent was quietly
+        // running on whatever the provider happened to list first.
+        if let Some(model) = &outcome.model {
+            conn.execute(
+                "UPDATE agent_profiles SET model_id = ?1
+                  WHERE id = (SELECT agent_profile_id FROM tasks WHERE id = ?2)
+                    AND (model_id IS NULL OR model_id = '')",
+                rusqlite::params![model, task_id],
+            )?;
+        }
     }
 
     // Fire the prompt.

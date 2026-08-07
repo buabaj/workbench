@@ -89,11 +89,40 @@ function Tools({ tools }: { tools: Turn["tools"] }) {
   );
 }
 
+/** Renders `@path` references in the accent colour, as typed. */
+function UserText({ text }: { text: string }) {
+  // Split on the same shape `extractMentions` recognises, keeping the
+  // separators so the message reads exactly as it was written.
+  const parts = text.split(/((?:^|\s)@[^\s]+)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const m = /^(\s*)@([^\s]+)$/.exec(part);
+        if (!m) return <span key={i}>{part}</span>;
+        return (
+          <span key={i}>
+            {m[1]}
+            <span
+              style={{
+                color: "var(--clay-text)",
+                fontFamily: "var(--mono)",
+                fontSize: "0.95em",
+              }}
+            >
+              @{m[2]}
+            </span>
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 function TurnView({ turn }: { turn: Turn }) {
   if (turn.role === "user") {
     return (
       <div className="turn-user">
-        {turn.text}
+        <UserText text={turn.text} />
       </div>
     );
   }
@@ -103,6 +132,19 @@ function TurnView({ turn }: { turn: Turn }) {
       {turn.text && <Markdown source={turn.text} className="md md-chat" />}
       {turn.streaming && !turn.text && turn.tools.length === 0 && (
         <div style={{ color: "var(--ink-faint)", fontSize: "var(--text-sm)" }}>Thinking…</div>
+      )}
+      {turn.notice && !turn.error && (
+        <div
+          role="status"
+          className="card"
+          style={{
+            borderColor: "var(--border-strong)",
+            color: "var(--ink-muted)",
+            fontSize: "var(--text-sm)",
+          }}
+        >
+          {turn.notice}
+        </div>
       )}
       {turn.error && (
         <div role="alert" className="card" style={{ borderColor: "var(--error)", color: "var(--error)", fontSize: "var(--text-sm)", userSelect: "text" }}>

@@ -51,6 +51,14 @@ pub struct AgentModel {
     pub id: String,
     pub provider: String,
     pub name: Option<String>,
+    /// Shown so a model cannot be chosen blind. An 8k window looks fine in a
+    /// list and then silently truncates the agent mid-task.
+    pub context_window: u64,
+    pub reasoning: bool,
+    /// USD per million output tokens, as reported by the agent.
+    pub output_cost: Option<f64>,
+    /// What auto-selection would choose — the one to pick if unsure.
+    pub recommended: bool,
 }
 
 /// Models the installed agent can actually reach for a given credential.
@@ -127,22 +135,45 @@ pub async fn agent_list_models(
         .data
         .unwrap_or(serde_json::Value::Null);
 
+    // Same ranking the supervisor uses when no model is configured, so the
+    // list agrees with what the app would pick on its own.
+    let recommended = crate::agent::model_pick::pick_for(&data, &slug);
+
     let mut out: Vec<AgentModel> = data
         .get("models")
         .and_then(|m| m.as_array())
         .map(|arr| {
             arr.iter()
                 .filter_map(|m| {
+                    let id = m.get("id")?.as_str()?.to_string();
+                    let recommended = recommended.as_deref() == Some(id.as_str());
                     Some(AgentModel {
-                        id: m.get("id")?.as_str()?.to_string(),
                         provider: m.get("provider")?.as_str()?.to_string(),
                         name: m.get("name").and_then(|n| n.as_str()).map(String::from),
+                        context_window: m
+                            .get("contextWindow")
+                            .and_then(|c| c.as_u64())
+                            .unwrap_or(0),
+                        reasoning: m.get("reasoning").and_then(|r| r.as_bool()).unwrap_or(false),
+                        output_cost: m
+                            .get("cost")
+                            .and_then(|c| c.get("output"))
+                            .and_then(|c| c.as_f64()),
+                        recommended,
+                        id,
                     })
                 })
                 .collect()
         })
         .unwrap_or_default();
-    // The selected provider first — that is what this credential can pay for.
-    out.sort_by_key(|m| (m.provider != slug, m.id.clone()));
+    // Selected provider first, then the biggest windows — the useful models
+    // should not be buried under alphabetical order.
+    out.sort_by(|a, b| {
+        (a.provider != slug)
+            .cmp(&(b.provider != slug))
+            .then(b.recommended.cmp(&a.recommended))
+            .then(b.context_window.cmp(&a.context_window))
+            .then(a.id.cmp(&b.id))
+    });
     Ok(out)
 }

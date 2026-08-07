@@ -32,6 +32,8 @@ export interface Turn {
   role: "user" | "assistant";
   text: string;
   error?: string;
+  /** Explains an outcome that is not an error but looks like nothing happened. */
+  notice?: string;
   tools: ToolRow[];
   /** Assistant turns stream; user turns are complete on creation. */
   streaming: boolean;
@@ -408,7 +410,22 @@ function reduce(item: StreamItem, set: Set, get: Get) {
     case "agent_end": {
       // NOT terminal: the process stays alive and accepts follow-ups. Treating
       // this as "succeeded" is what made the conversation single-shot.
-      patchLast(get, set, (t) => ({ ...t, streaming: false }));
+      //
+      // A turn that ran tools and then produced no words is the shape a context
+      // overflow takes: the model reads a file, exceeds its window, and the
+      // reply never comes. Showing a bare "Done" made that look like the app
+      // losing the answer, so name it and say what to do about it.
+      patchLast(get, set, (t) =>
+        !t.text && !t.error && t.tools.length > 0
+          ? {
+              ...t,
+              streaming: false,
+              notice:
+                "The agent ran tools but returned no reply. That usually means the model ran out " +
+                "of context — pick one with a larger context window in Settings → Providers.",
+            }
+          : { ...t, streaming: false },
+      );
       if (get().status !== "failed") set({ status: "awaiting-input", phase: "complete" });
       const { taskId, turns } = get();
       if (taskId) {

@@ -82,19 +82,6 @@ pub struct StartOutcome {
     pub model: Option<String>,
 }
 
-/// Model ids reported by `get_available_models`, for a provider.
-fn models_for(data: &Value, provider: &str) -> Vec<String> {
-    data.get("models")
-        .and_then(|m| m.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter(|m| m.get("provider").and_then(|p| p.as_str()) == Some(provider))
-                .filter_map(|m| m.get("id").and_then(|i| i.as_str()).map(String::from))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 impl Supervisor {
     pub fn get(&self, task_id: &str) -> Option<Arc<RunningTask>> {
         self.tasks.read().unwrap().get(task_id).cloned()
@@ -195,8 +182,12 @@ impl Supervisor {
                     .request("get_available_models", json!({}), Duration::from_secs(20))
                     .await
                 {
-                    let candidates = models_for(&list.data.unwrap_or(Value::Null), provider);
-                    if let Some(first) = candidates.first() {
+                    let data = list.data.unwrap_or(Value::Null);
+                    // Ranked on the model's own reported properties, not
+                    // first-in-list: that picked gpt-4 and its 8k window,
+                    // which cannot hold a file and a conversation at once.
+                    if let Some(first) = super::model_pick::pick_for(&data, provider) {
+                        let first = &first;
                         // Params are `provider` + `modelId`, NOT `model` —
                         // verified against the live RPC, which rejects the
                         // latter with "Model not found: undefined/undefined".

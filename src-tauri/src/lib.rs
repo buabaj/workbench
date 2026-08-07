@@ -89,6 +89,7 @@ pub fn run() {
             commands::profiles::agent_profiles_upsert,
             commands::profiles::agent_profiles_delete,
             commands::profiles::profiles_set_default,
+            commands::profiles::agent_profile_set_model,
             commands::profiles::profiles_resolve,
             commands::workspace::workspace_open,
             commands::workspace::workspace_pick,

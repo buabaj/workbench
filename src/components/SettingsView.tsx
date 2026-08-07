@@ -5,7 +5,15 @@ import { useChat } from "../store/chat";
 import { useTheme, type ThemeChoice } from "../store/theme";
 import { useWorkspace } from "../store/workspace";
 
-const SLUGS = ["anthropic", "openai", "openrouter", "prime-inference", "kimi-coding", "google"];
+const SLUGS = [
+  "anthropic",
+  "openai",
+  "openai-codex",
+  "openrouter",
+  "prime-inference",
+  "kimi-coding",
+  "google",
+];
 
 /** Native selects can't be styled to match; this is a small listbox that can. */
 function Select({
@@ -198,7 +206,21 @@ export function SettingsView() {
   /** Ask the agent which models this credential can actually reach. Without an
    * explicit model, prime-agent falls back to a default that may belong to a
    * DIFFERENT provider — which is how work got billed to the wrong account. */
+  const [modelsFor, setModelsFor] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<string | null>(null);
+
+  const chooseModel = async (credentialId: string, modelId: string) => {
+    try {
+      await ipc.agentProfileSetModel(credentialId, modelId);
+      setChosen(modelId);
+      setErr(null);
+    } catch (e) {
+      setErr(formatError(e));
+    }
+  };
+
   const loadModels = async (credentialId: string) => {
+    setModelsFor(credentialId);
     setLoadingModels(true);
     try {
       setModels(await ipc.agentListModels(credentialId));
@@ -229,6 +251,40 @@ export function SettingsView() {
       </Section>
 
       <Section title="Providers">
+        {/* An API key is billed per token and is entirely separate from a
+            ChatGPT or Claude subscription — paying for both is easy to do by
+            accident. prime-agent can authenticate against the subscription
+            instead, but only after a one-off login on the host, so say so
+            here rather than leaving it to be discovered. */}
+        {!host.some((h) => h.isOauth) && (
+          <Row
+            label="Use a subscription"
+            hint="Avoids per-token API billing you may already be paying for."
+          >
+            <div style={{ fontSize: "var(--text-sm)", color: "var(--ink-muted)", lineHeight: 1.5 }}>
+              An API key is metered separately from a ChatGPT Plus/Pro or Claude subscription. To
+              bill work to a subscription you already have, run this once in a terminal:
+              <div
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: "var(--text-xs)",
+                  color: "var(--ink)",
+                  background: "var(--raised)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--r-control)",
+                  padding: "6px 10px",
+                  margin: "var(--s-2) 0",
+                  userSelect: "text",
+                }}
+              >
+                prime-agent
+              </div>
+              then use <span style={{ fontFamily: "var(--mono)" }}>/login</span> and pick your
+              subscription. It appears here as an OAuth session, and Workbench uses it in place —
+              the tokens are never copied.
+            </div>
+          </Row>
+        )}
         {host.length > 0 && (
           <Row label="On this Mac" hint="Used in place; tokens are never copied.">
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -324,18 +380,44 @@ export function SettingsView() {
                   </button>
                 </div>
               ))}
-              {models.length > 0 && (
+              {models.length > 0 && modelsFor && (
                 <div style={{ marginTop: "var(--s-2)" }}>
                   <div style={{ fontSize: "var(--text-xs)", color: "var(--ink-faint)", marginBottom: 4 }}>
-                    {models.length} model{models.length === 1 ? "" : "s"} reachable — first is used unless you set one
+                    {models.length} model{models.length === 1 ? "" : "s"} reachable — click one to use it.
+                    Context window matters most: a small one truncates the agent mid-task.
                   </div>
-                  <div style={{ maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
-                    {models.slice(0, 40).map((m) => (
-                      <div key={`${m.provider}/${m.id}`}
-                           style={{ display: "flex", gap: 8, fontSize: "var(--text-xs)", fontFamily: "var(--mono)" }}>
-                        <span style={{ color: "var(--ink-faint)", minWidth: 110 }}>{m.provider}</span>
-                        <span>{m.id}</span>
-                      </div>
+                  <div style={{ maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+                    {models.slice(0, 60).map((m) => (
+                      <button
+                        key={`${m.provider}/${m.id}`}
+                        className="btn quiet"
+                        onClick={() => void chooseModel(modelsFor, m.id)}
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "baseline",
+                          width: "100%",
+                          justifyContent: "flex-start",
+                          fontSize: "var(--text-xs)",
+                          fontFamily: "var(--mono)",
+                          textAlign: "left",
+                          background: chosen === m.id ? "var(--clay-wash)" : undefined,
+                        }}
+                      >
+                        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{m.id}</span>
+                        {m.recommended && chosen !== m.id && (
+                          <span style={{ color: "var(--clay-text)", flexShrink: 0 }}>recommended</span>
+                        )}
+                        {chosen === m.id && (
+                          <span style={{ color: "var(--clay-text)", flexShrink: 0 }}>in use</span>
+                        )}
+                        <span style={{ color: "var(--ink-faint)", flexShrink: 0, minWidth: 52, textAlign: "right" }}>
+                          {m.contextWindow ? `${Math.round(m.contextWindow / 1000)}k` : "—"}
+                        </span>
+                        <span style={{ color: "var(--ink-faint)", flexShrink: 0, minWidth: 56, textAlign: "right" }}>
+                          {m.outputCost != null ? `$${m.outputCost}/M` : ""}
+                        </span>
+                      </button>
                     ))}
                   </div>
                 </div>

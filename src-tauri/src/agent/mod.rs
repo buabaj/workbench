@@ -10,6 +10,7 @@ pub mod dispatch;
 pub mod env;
 pub mod framer;
 pub mod lease;
+pub mod model_pick;
 pub mod oauth_discovery;
 pub mod preflight;
 pub mod protocol;
