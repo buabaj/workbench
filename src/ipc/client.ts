@@ -20,6 +20,13 @@ export interface WorktreeChange {
   untracked: boolean;
 }
 
+export interface BranchState {
+  branch: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+}
+
 export interface SearchQuery {
   pattern: string;
   caseSensitive: boolean;
@@ -313,6 +320,8 @@ export const ipc = {
   ) => invoke<ReplaceOutcome>("search_replace", { workspaceId, query, replacement, relPaths }),
   worktreeChanges: (workspaceId: string) =>
     invoke<WorktreeChange[]>("worktree_changes", { workspaceId }),
+  worktreeBranch: (workspaceId: string) =>
+    invoke<BranchState>("worktree_branch", { workspaceId }),
   worktreePatch: (workspaceId: string, relPath: string) =>
     invoke<string>("worktree_patch", { workspaceId, relPath }),
   fileCreate: (workspaceId: string, path: string) =>

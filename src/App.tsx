@@ -97,7 +97,8 @@ export default function App() {
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
   const [commandNote, setCommandNote] = useState<string | null>(null);
-  const [railTab, setRailTab] = useState<"files" | "search" | "changes">("files");
+  const railTab = useLayout((s) => s.railTab);
+  const setRailTab = useLayout((s) => s.setRailTab);
   const [creating, setCreating] = useState<"file" | "dir" | null>(null);
   const [sectionOpen, setSectionOpen] = useState(true);
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -203,7 +204,7 @@ export default function App() {
         setTerminalOpen((v) => !v);
       } else if (e.shiftKey && k === "f") {
         e.preventDefault();
-        setRailTab("search");
+        useLayout.getState().setRailTab("search");
         if (!useLayout.getState().railOpen) toggleRail();
       } else if (e.shiftKey && k === "v") {
         e.preventDefault();

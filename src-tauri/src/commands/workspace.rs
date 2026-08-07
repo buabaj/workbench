@@ -287,6 +287,16 @@ pub fn worktree_changes(
     Ok(crate::vcs::worktree::changes(root.real())?)
 }
 
+/// Branch and upstream state, for the change list's header.
+#[tauri::command]
+pub fn worktree_branch(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+) -> Result<crate::vcs::worktree::BranchState, AppError> {
+    let root = root_for(&open, &workspace_id)?;
+    Ok(crate::vcs::worktree::branch_state(root.real())?)
+}
+
 /// Unified patch for one uncommitted file.
 #[tauri::command]
 pub fn worktree_patch(

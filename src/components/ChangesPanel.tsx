@@ -1,6 +1,13 @@
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { formatError, ipc, onFsChanged, type WorktreeChange } from "../ipc/client";
+import {
+  formatError,
+  ipc,
+  onFsChanged,
+  type BranchState,
+  type WorktreeChange,
+} from "../ipc/client";
+import { useLayout } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
 
 /**
@@ -132,11 +139,53 @@ function Patch({ workspaceId, relPath }: { workspaceId: string; relPath: string 
   );
 }
 
+/**
+ * Branch and upstream position.
+ *
+ * Shown even when there is nothing uncommitted, because that is precisely when
+ * it is needed: a clean tree that is "ahead of origin/main by 32 commits" made
+ * an empty change list look broken to anyone who had just run `git status`.
+ */
+function BranchLine({ branch }: { branch: BranchState | null }) {
+  if (!branch?.branch) return null;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "baseline",
+        gap: "var(--s-2)",
+        fontSize: "var(--text-xs)",
+        color: "var(--ink-faint)",
+        fontFamily: "var(--mono)",
+        padding: "0 2px 6px",
+      }}
+    >
+      <span style={{ color: "var(--clay-text)" }}>{branch.branch}</span>
+      {branch.upstream ? (
+        branch.ahead === 0 && branch.behind === 0 ? (
+          <span>up to date with {branch.upstream}</span>
+        ) : (
+          <span>
+            {branch.ahead > 0 && `${branch.ahead} ahead`}
+            {branch.ahead > 0 && branch.behind > 0 && ", "}
+            {branch.behind > 0 && `${branch.behind} behind`} {branch.upstream}
+          </span>
+        )
+      ) : (
+        <span>no upstream</span>
+      )}
+    </div>
+  );
+}
+
 export function ChangesPanel() {
   const workspace = useWorkspace((s) => s.workspace);
   const [changes, setChanges] = useState<WorktreeChange[]>([]);
+  const [branch, setBranch] = useState<BranchState | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [err, setErr] = useState<string | null>(null);
+  const focus = useLayout((s) => s.changesFocus);
+  const clearFocus = useLayout((s) => s.clearChangesFocus);
 
   const reload = useCallback(() => {
     if (!workspace) return;
@@ -147,7 +196,18 @@ export function ChangesPanel() {
         setErr(null);
       })
       .catch((e) => setErr(formatError(e)));
+    void ipc
+      .worktreeBranch(workspace.id)
+      .then(setBranch)
+      .catch(() => setBranch(null));
   }, [workspace?.id]);
+
+  // Task review sends you here with one file in mind; open it on arrival.
+  useEffect(() => {
+    if (!focus) return;
+    setOpen((prev) => new Set(prev).add(focus));
+    clearFocus();
+  }, [focus, clearFocus]);
 
   useEffect(reload, [reload]);
 
@@ -176,7 +236,12 @@ export function ChangesPanel() {
     );
   }
   if (changes.length === 0) {
-    return <div className="panel-empty">No uncommitted changes.</div>;
+    return (
+      <div>
+        <BranchLine branch={branch} />
+        <div className="panel-empty">No uncommitted changes.</div>
+      </div>
+    );
   }
 
   const totals = changes.reduce(
@@ -186,6 +251,7 @@ export function ChangesPanel() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      <BranchLine branch={branch} />
       <div
         style={{
           display: "flex",

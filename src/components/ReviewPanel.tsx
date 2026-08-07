@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   ipc,
@@ -6,6 +7,7 @@ import {
   type TaskDiff,
 } from "../ipc/client";
 import { useChat } from "../store/chat";
+import { useLayout } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -81,20 +83,38 @@ function FileRow({
           style={{ accentColor: "var(--clay)" }}
           title="Select for restore"
         />
-        <span
+        {/* The name opens the file in Changes, where diffs live and stay
+            live; the twisty is for a quick look without leaving the panel.
+            Two targets, because "expand here" and "go read it properly" are
+            different intentions. */}
+        <button
+          className="btn quiet"
           style={{
             flex: 1,
+            minWidth: 0,
+            justifyContent: "flex-start",
             color: "var(--ink)",
-            cursor: "pointer",
+            fontSize: 11,
+            padding: "0 2px",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
           }}
-          onClick={() => setOpen((o) => !o)}
-          title={file.relPath}
+          onClick={() => useLayout.getState().showInChanges(file.relPath)}
+          title={`Open ${file.relPath} in Changes`}
         >
           {file.oldPath ? `${file.oldPath} → ${file.relPath}` : file.relPath}
-        </span>
+        </button>
+        <button
+          className="btn icon"
+          aria-label={open ? "Hide diff" : "Show diff here"}
+          aria-expanded={open}
+          title={open ? "Hide diff" : "Show diff here"}
+          onClick={() => setOpen((o) => !o)}
+          style={{ padding: 2, color: "var(--ink-faint)" }}
+        >
+          {open ? <ChevronDown size={12} strokeWidth={2} /> : <ChevronRight size={12} strokeWidth={2} />}
+        </button>
         <span style={{ color: "var(--ink-faint)", fontSize: 10 }}>
           {STATUS_LABEL[file.status] ?? file.status}
         </span>

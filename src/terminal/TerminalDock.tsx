@@ -324,7 +324,22 @@ export function TerminalDock({
             {/* An explicit seam, not a border: a 1px rule tinted at the dock's
                 usual faint alpha simply disappeared against the terminal
                 background, so this is its own element and its own weight. */}
-            {split && i > 0 && <div className="term-split" aria-hidden />}
+            {split && i > 0 && (
+              // Inline, not a class: two attempts at styling this through the
+              // stylesheet produced no visible seam, and an element whose
+              // whole job is to be seen should not depend on the cascade.
+              <div
+                aria-hidden
+                className="term-split"
+                style={{
+                  flex: "0 0 6px",
+                  alignSelf: "stretch",
+                  minHeight: 0,
+                  background: "var(--clay)",
+                  opacity: 0.55,
+                }}
+              />
+            )}
             <div
               style={{
                 // Split shows every pane at once; tabs show the active one.

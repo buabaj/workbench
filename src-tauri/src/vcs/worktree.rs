@@ -38,6 +38,57 @@ fn opts(include_untracked: bool) -> git2::DiffOptions {
     o
 }
 
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchState {
+    pub branch: Option<String>,
+    pub upstream: Option<String>,
+    /// Commits on the branch that the upstream does not have.
+    pub ahead: usize,
+    /// Commits on the upstream that the branch does not have.
+    pub behind: usize,
+}
+
+/// Which branch, and how it stands against its upstream.
+///
+/// Shown beside the change list because "no uncommitted changes" and "ahead of
+/// origin/main by 32 commits" are both true at once, and a panel that reports
+/// only the first reads as broken to anyone who just ran `git status`.
+pub fn branch_state(root: &Path) -> Result<BranchState, VcsError> {
+    let none = BranchState { branch: None, upstream: None, ahead: 0, behind: 0 };
+    let Ok(repo) = git2::Repository::open(root) else {
+        return Ok(none);
+    };
+    let Ok(head) = repo.head() else {
+        // Unborn HEAD: nothing committed yet, so nothing to compare.
+        return Ok(none);
+    };
+    // git2 0.21 returns Result here, not Option.
+    let branch: Option<String> = head.shorthand().ok().map(String::from);
+    let Some(local_oid) = head.target() else {
+        return Ok(BranchState { branch, ..none });
+    };
+
+    let upstream = branch
+        .as_deref()
+        .and_then(|b| repo.find_branch(b, git2::BranchType::Local).ok())
+        .and_then(|br| br.upstream().ok());
+    let Some(up) = upstream else {
+        // No upstream configured is ordinary, not an error.
+        return Ok(BranchState { branch, ..none });
+    };
+    let up_name = up.name().ok().flatten().map(String::from);
+
+    let Some(up_oid) = up.get().target() else {
+        return Ok(BranchState { branch, upstream: up_name, ..none });
+    };
+
+    let (ahead, behind) = repo
+        .graph_ahead_behind(local_oid, up_oid)
+        .unwrap_or((0, 0));
+    Ok(BranchState { branch, upstream: up_name, ahead, behind })
+}
+
 /// Everything different from HEAD right now, staged or not.
 ///
 /// Returns an empty list rather than an error when the directory is not a
@@ -259,6 +310,48 @@ mod tests {
         std::fs::write(root.join("other.txt"), "unrelated\n").unwrap();
         let p = patch(&root, "tracked.txt").unwrap();
         assert!(!p.contains("unrelated"), "other files leaked in:\n{p}");
+    }
+
+    #[test]
+    fn reports_the_branch_and_no_upstream_by_default() {
+        let (_d, root) = repo_with_commit();
+        let st = branch_state(&root).unwrap();
+        // The default branch name depends on git config, so assert it exists
+        // rather than pinning main vs master.
+        assert!(st.branch.is_some(), "a committed repo has a branch");
+        assert_eq!(st.upstream, None, "a fresh repo has no upstream");
+        assert_eq!((st.ahead, st.behind), (0, 0));
+    }
+
+    /// The reported confusion: a clean tree with unpushed commits. The change
+    /// list is empty AND the branch is ahead — both must be reportable.
+    #[test]
+    fn counts_commits_ahead_of_an_upstream() {
+        let (_d, root) = repo_with_commit();
+        let repo = git2::Repository::open(&root).unwrap();
+
+        // Stand in for a remote: a second branch this one tracks.
+        let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch("upstream", &head_commit, false).unwrap();
+        let branch_name = repo.head().unwrap().shorthand().unwrap().to_string();
+        let mut local = repo.find_branch(&branch_name, git2::BranchType::Local).unwrap();
+        local.set_upstream(Some("upstream")).unwrap();
+
+        // One commit beyond the upstream.
+        std::fs::write(root.join("tracked.txt"), "changed\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("tracked.txt")).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = git2::Signature::now("t", "t@example.com").unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "second", &tree, &[&head_commit]).unwrap();
+
+        let st = branch_state(&root).unwrap();
+        assert_eq!(st.ahead, 1, "one unpushed commit");
+        assert_eq!(st.behind, 0);
+        assert!(st.upstream.is_some());
+        // And the working tree is clean, which is the whole point.
+        assert!(changes(&root).unwrap().is_empty());
     }
 
     /// A directory that is not a repository is an ordinary state, not an error.

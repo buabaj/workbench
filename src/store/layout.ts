@@ -35,6 +35,14 @@ interface Persisted {
 }
 
 interface LayoutStore {
+  /** Which rail view is showing. In the store so other panels can switch it. */
+  railTab: "files" | "search" | "changes";
+  /** A file the Changes panel should scroll to and expand. */
+  changesFocus: string | null;
+  setRailTab(tab: "files" | "search" | "changes"): void;
+  showInChanges(relPath: string): void;
+  clearChangesFocus(): void;
+
   tabs: Tab[];
   activeTabId: string;
   railOpen: boolean;
@@ -137,6 +145,14 @@ export const useLayout = create<LayoutStore>((set, get) => {
 
     toggleMdPreview: (relPath) =>
       set((s) => ({ mdPreview: { ...s.mdPreview, [relPath]: !s.mdPreview[relPath] } })),
+
+    railTab: "files",
+    changesFocus: null,
+    setRailTab: (railTab) => set({ railTab }),
+    /** Jump to the Changes view with one file open — used by task review. */
+    showInChanges: (relPath) =>
+      set({ railTab: "changes", changesFocus: relPath, railOpen: true }),
+    clearChangesFocus: () => set({ changesFocus: null }),
 
     toggleRail: () => {
       set((s) => ({ railOpen: !s.railOpen }));
