@@ -182,6 +182,12 @@ export default function App() {
       } else if (e.shiftKey && (k === "]" || k === "[")) {
         e.preventDefault();
         cycleTab(k === "]" ? 1 : -1);
+      } else if (e.shiftKey && k === "t") {
+        // ⌘⇧T alongside ⌃`, because that is the muscle memory people arrive
+        // with. Both hide rather than close, so a running command survives.
+        e.preventDefault();
+        setTerminalAlive(true);
+        setTerminalOpen((v) => !v);
       } else if (e.shiftKey && k === "f") {
         e.preventDefault();
         setRailTab("search");
@@ -318,7 +324,7 @@ export default function App() {
           }}
           aria-label="Toggle terminal"
           aria-pressed={terminalOpen}
-          title="Terminal (⌃`)"
+          title="Terminal (⌘⇧T or ⌃`)"
           disabled={!workspace}
         >
           <SquareTerminal size={15} strokeWidth={1.6} />

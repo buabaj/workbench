@@ -5,15 +5,29 @@ import { useWorkspace } from "../store/workspace";
 import { FileIcon, FolderIcon } from "../icons/fileIcon";
 import { formatError, ipc, type TreeNode } from "../ipc/client";
 
+function parentOf(relPath: string): string {
+  const i = relPath.lastIndexOf("/");
+  return i === -1 ? "" : relPath.slice(0, i);
+}
+
 function Row({ node, depth }: { node: TreeNode; depth: number }) {
   const expanded = useWorkspace((s) => s.expanded[node.relPath] ?? false);
   const active = useLayout((s) => s.activeFile() === node.relPath);
   const phase = useWorkspace((s) => s.buffers[node.relPath]?.phase);
   const toggleDir = useWorkspace((s) => s.toggleDir);
   const openFile = useWorkspace((s) => s.openFile);
+  const selectDir = useWorkspace((s) => s.selectDir);
+  const selectedDir = useWorkspace((s) => s.selectedDir);
 
   const indent = { paddingLeft: `${8 + depth * 12}px` };
-  const activate = () => (node.isDir ? toggleDir(node.relPath) : openFile(node.relPath));
+  const activate = () => {
+    if (!node.isDir) return openFile(node.relPath);
+    // Clicking a folder also makes it the place new files land. Collapsing it
+    // hands that back to the root, so the target is always something visible.
+    const willExpand = !expanded;
+    toggleDir(node.relPath);
+    selectDir(willExpand ? node.relPath : parentOf(node.relPath));
+  };
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -29,10 +43,12 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
     return (
       <>
         <div
-          className="rail-item"
+          className={`rail-item ${selectedDir === node.relPath ? "dir-target" : ""}`}
           role="treeitem"
           aria-expanded={expanded}
-          aria-label={`${node.name}, folder${node.ignored ? ", git-ignored" : ""}`}
+          aria-label={`${node.name}, folder${node.ignored ? ", git-ignored" : ""}${
+            selectedDir === node.relPath ? ", selected" : ""
+          }`}
           tabIndex={0}
           onClick={activate}
           onKeyDown={onKeyDown}
@@ -125,6 +141,7 @@ function CreateRow({
   const workspace = useWorkspace((s) => s.workspace);
   const loadChildren = useWorkspace((s) => s.loadChildren);
   const openFile = useWorkspace((s) => s.openFile);
+  const selectedDir = useWorkspace((s) => s.selectedDir);
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
@@ -132,8 +149,12 @@ function CreateRow({
   useEffect(() => ref.current?.focus(), []);
 
   const commit = async () => {
-    const path = name.trim().replace(/^\/+/, "");
-    if (!workspace || !path) return onDone();
+    const typed = name.trim().replace(/^\/+/, "");
+    // Relative to the folder you last opened, the way an editor's "new file"
+    // is. A leading "/" is the escape hatch back to the workspace root.
+    const path =
+      selectedDir && !name.trim().startsWith("/") ? `${selectedDir}/${typed}` : typed;
+    if (!workspace || !typed) return onDone();
     try {
       if (kind === "file") {
         await ipc.fileCreate(workspace.id, path);
@@ -153,11 +174,22 @@ function CreateRow({
 
   return (
     <div style={{ padding: "2px 8px" }}>
+      {selectedDir && (
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--ink-faint)", padding: "0 2px 2px" }}>
+          in {selectedDir}/
+        </div>
+      )}
       <input
         ref={ref}
         className="field"
         style={{ fontSize: "var(--text-sm)", padding: "3px 6px" }}
-        placeholder={kind === "file" ? "path/name.ext" : "folder name"}
+        placeholder={
+          selectedDir
+            ? `${selectedDir}/${kind === "file" ? "name.ext" : "folder"}`
+            : kind === "file"
+              ? "path/name.ext"
+              : "folder name"
+        }
         aria-label={kind === "file" ? "New file path" : "New folder name"}
         value={name}
         onChange={(e) => {

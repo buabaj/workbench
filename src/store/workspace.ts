@@ -24,6 +24,8 @@ interface WorkspaceStore {
   mode: "code" | "research";
   childrenByPath: Record<string, TreeNode[]>;
   expanded: Record<string, boolean>;
+  /** Folder last opened in the tree; new files land here. "" is the root. */
+  selectedDir: string;
   buffers: Record<string, BufferMeta>;
   /** Range an editor should scroll to and select once mounted (cross-mode nav). */
   pendingReveal: { relPath: string; from: number; to: number } | null;
@@ -33,6 +35,7 @@ interface WorkspaceStore {
   openWorkspace(path: string): Promise<void>;
   loadChildren(subpath: string): Promise<void>;
   collapseAll(): void;
+  selectDir(relPath: string): void;
   toggleDir(relPath: string): void;
   openFile(relPath: string): void;
   revealRange(relPath: string, from: number, to: number): void;
@@ -52,6 +55,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   mode: "research",
   childrenByPath: {},
   expanded: {},
+  selectedDir: "",
   buffers: {},
   pendingReveal: null,
 
@@ -61,7 +65,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     const ws = await ipc.workspacePick();
     if (ws) {
       editorRegistry.clear();
-      set({ workspace: ws, childrenByPath: {}, expanded: {}, buffers: {} });
+      set({ workspace: ws, childrenByPath: {}, expanded: {}, buffers: {}, selectedDir: "" });
       await useLayout.getState().hydrate(ws.id);
       await get().loadChildren("");
     }
@@ -70,7 +74,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   openWorkspace: async (path) => {
     const ws = await ipc.workspaceOpen(path);
     editorRegistry.clear();
-    set({ workspace: ws, childrenByPath: {}, expanded: {}, buffers: {} });
+    set({ workspace: ws, childrenByPath: {}, expanded: {}, buffers: {}, selectedDir: "" });
     await useLayout.getState().hydrate(ws.id);
     await get().loadChildren("");
   },
@@ -92,7 +96,9 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   },
 
   /** Fold every directory shut, leaving the root level visible. */
-  collapseAll: () => set({ expanded: {} }),
+  collapseAll: () => set({ expanded: {}, selectedDir: "" }),
+
+  selectDir: (relPath) => set({ selectedDir: relPath }),
 
   openFile: (relPath) => {
     useLayout.getState().openFileTab(relPath);

@@ -1,8 +1,8 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Columns2, Plus, Rows2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { useWorkspace } from "../store/workspace";
 
@@ -33,13 +33,11 @@ function themeFromTokens(): Record<string, string> {
   };
 }
 
-export function TerminalDock({
+export function TerminalPane({
   hidden = false,
-  onClose,
 }: {
   /** Toggled out of view. The shell keeps running; only the pixels go away. */
   hidden?: boolean;
-  onClose: () => void;
 }) {
   const workspace = useWorkspace((s) => s.workspace);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -167,6 +165,52 @@ export function TerminalDock({
     return () => cancelAnimationFrame(raf);
   }, [hidden]);
 
+  return <div ref={hostRef} style={{ flex: 1, minHeight: 0, padding: "var(--s-2)" }} />;
+}
+
+
+/**
+ * The dock: several shells, as tabs or side by side.
+ *
+ * Panes are keyed by a client-side id and stay mounted whichever view is
+ * chosen, so switching tabs or splitting never restarts a shell — the same
+ * reason toggling the dock hides rather than unmounts.
+ */
+let paneSeq = 0;
+const nextPaneId = () => `pane-${++paneSeq}`;
+
+export function TerminalDock({
+  hidden = false,
+  onClose,
+}: {
+  hidden?: boolean;
+  onClose: () => void;
+}) {
+  const workspace = useWorkspace((s) => s.workspace);
+  const [panes, setPanes] = useState<string[]>(() => [nextPaneId()]);
+  const [activeId, setActiveId] = useState<string>(() => panes[0]);
+  const [split, setSplit] = useState(false);
+
+  const addPane = () => {
+    const id = nextPaneId();
+    setPanes((p) => [...p, id]);
+    setActiveId(id);
+  };
+
+  const closePane = (id: string) => {
+    setPanes((prev) => {
+      const next = prev.filter((p) => p !== id);
+      // Closing the last shell closes the dock: an empty dock is just a
+      // rectangle of nothing taking up a third of the window.
+      if (next.length === 0) {
+        onClose();
+        return prev;
+      }
+      if (activeId === id) setActiveId(next[Math.max(0, prev.indexOf(id) - 1)]);
+      return next;
+    });
+  };
+
   return (
     <section
       aria-label="Terminal"
@@ -183,27 +227,112 @@ export function TerminalDock({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "var(--s-2)",
-          padding: "4px var(--s-3)",
+          gap: 2,
+          padding: "3px var(--s-3)",
           borderBottom: "1px solid var(--border)",
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: "var(--text-xs)", color: "var(--ink-muted)" }}>Terminal</span>
-        <span style={{ fontSize: "var(--text-xs)", color: "var(--ink-faint)", flex: 1 }}>
-          {workspace?.name ?? ""}
-        </span>
+        {panes.map((id, i) => (
+          <span key={id} style={{ display: "inline-flex", alignItems: "center" }}>
+            <button
+              className={`term-tab ${!split && activeId === id ? "on" : ""}`}
+              aria-pressed={!split && activeId === id}
+              onClick={() => {
+                setActiveId(id);
+                setSplit(false);
+              }}
+              title={`Terminal ${i + 1}`}
+            >
+              {i + 1}
+              {/* Only the active tab offers its close control, so a row of
+                  tabs is not a row of X's. */}
+              {(split || activeId === id) && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Close terminal ${i + 1}`}
+                  title="Close this shell"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closePane(id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      closePane(id);
+                    }
+                  }}
+                  style={{ display: "inline-flex", marginLeft: 4, opacity: 0.7 }}
+                >
+                  <X size={10} strokeWidth={2} />
+                </span>
+              )}
+            </button>
+          </span>
+        ))}
+
         <button
           className="btn icon"
-          aria-label="Close terminal and end the shell"
-          title="Close and end this shell — ⌃` only hides it"
-          onClick={onClose}
+          aria-label="New terminal"
+          title="New terminal"
+          onClick={addPane}
           style={{ padding: 3, color: "var(--ink-faint)" }}
         >
-          <X size={12} strokeWidth={1.8} />
+          <Plus size={13} strokeWidth={1.8} />
         </button>
+
+        {panes.length > 1 && (
+          <button
+            className="btn icon"
+            aria-label={split ? "Show one at a time" : "Show side by side"}
+            aria-pressed={split}
+            title={split ? "Tabs" : "Split side by side"}
+            onClick={() => setSplit((v) => !v)}
+            style={{ padding: 3, color: split ? "var(--clay-text)" : "var(--ink-faint)" }}
+          >
+            {split ? <Rows2 size={13} strokeWidth={1.8} /> : <Columns2 size={13} strokeWidth={1.8} />}
+          </button>
+        )}
+
+        {/* The workspace, in the accent — so which project these shells are
+            rooted in is readable at a glance rather than another grey word. */}
+        <span
+          style={{
+            marginLeft: "auto",
+            fontSize: "var(--text-xs)",
+            color: "var(--clay-text)",
+            fontFamily: "var(--mono)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: "40%",
+          }}
+          title={workspace?.rootPath ?? ""}
+        >
+          {workspace?.name ?? ""}
+        </span>
       </div>
-      <div ref={hostRef} style={{ flex: 1, minHeight: 0, padding: "var(--s-2)" }} />
+
+      <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 0 }}>
+        {panes.map((id) => (
+          <div
+            key={id}
+            style={{
+              // Split shows every pane at once; tabs show the active one. Both
+              // keep the others mounted, so no shell is ever restarted.
+              display: split || activeId === id ? "flex" : "none",
+              flex: 1,
+              minWidth: 0,
+              minHeight: 0,
+              borderLeft: split && panes[0] !== id ? "1px solid var(--border)" : undefined,
+            }}
+          >
+            <TerminalPane hidden={hidden || (!split && activeId !== id)} />
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

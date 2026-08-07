@@ -101,6 +101,7 @@ body {
 .rail-tabs {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 2px;
   padding: var(--s-2) var(--s-3);
 }
@@ -116,7 +117,7 @@ body {
   transition: background var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
 }
 .rail-tab:hover { color: var(--ink-secondary); background: var(--raised); }
-.rail-tab.on { color: var(--ink); background: var(--raised); }
+.rail-tab.on { color: var(--clay-text); background: var(--raised); }
 
 /* Section header: the project name, with the actions that apply to it. */
 .rail-head {
@@ -170,6 +171,9 @@ body {
   transition: background var(--dur-fast) var(--ease);
 }
 .rail-item:hover { background: var(--raised); }
+/* The folder new files will land in. A left rule rather than a fill, so it
+   does not compete with the open-file highlight. */
+.rail-item.dir-target { box-shadow: inset 2px 0 0 var(--clay); }
 .rail-item.on {
   background: var(--clay-wash);
   color: var(--ink);
@@ -547,3 +551,21 @@ body {
 .rule-drag:focus-visible {
   background: var(--rule-clay-hover);
 }
+
+/* Terminal tabs: numbered, quiet, with the active one lifted onto the canvas
+   the way a document tab sits on its page. */
+.term-tab {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 2px 8px;
+  border-radius: var(--r-chip, 6px);
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+}
+.term-tab:hover { background: var(--raised); color: var(--ink-secondary); }
+.term-tab.on { background: var(--raised); color: var(--clay-text); }
