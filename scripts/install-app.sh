@@ -26,4 +26,19 @@ fi
 
 rm -rf "$DEST"
 cp -R "$SRC" "$DEST"
-echo "installed $(shasum -a 256 "$DEST/Contents/MacOS/workbench" | cut -c1-12) -> $DEST"
+
+# Register the copy that was just installed, so Launch Services resolves
+# "Workbench" to it rather than to whatever it happened to see last.
+LSREG=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+[ -x "$LSREG" ] && "$LSREG" -f "$DEST" >/dev/null 2>&1
+
+# Prove the installed binary IS the one just built. Every "it did not take"
+# so far has come down to this not being checked.
+BUILT=$(shasum -a 256 "$SRC/Contents/MacOS/workbench" | cut -d" " -f1)
+LIVE=$(shasum -a 256 "$DEST/Contents/MacOS/workbench" | cut -d" " -f1)
+if [ "$BUILT" != "$LIVE" ]; then
+  echo "MISMATCH: installed binary differs from the build" >&2
+  exit 1
+fi
+echo "installed ${LIVE:0:12} -> $DEST (verified against the build)"
+echo "copies on this machine: $(find /Applications src-tauri/target -maxdepth 6 -name "Workbench.app" -type d 2>/dev/null | wc -l | tr -d " ")"

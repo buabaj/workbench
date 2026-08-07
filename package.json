@@ -10,7 +10,7 @@
     "tauri": "tauri",
     "test": "vitest run",
     "install:app": "bash scripts/install-app.sh",
-    "ship": "bash scripts/quit-app.sh && bash scripts/detach-stale-dmg.sh && bash scripts/build-app.sh && npm run install:app"
+    "ship": "bash scripts/quit-app.sh && bash scripts/clean-installs.sh && bash scripts/build-app.sh && npm run install:app"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.2",
