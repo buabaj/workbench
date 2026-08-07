@@ -202,4 +202,9 @@ link to another, and **Backlinks** shows both directions.
 
 ## Licence
 
-None yet — all rights reserved for now. Ask if you want to use it for something.
+[MIT](LICENSE) — use it, fork it, build on it. Keep the copyright notice.
+
+Bundled third-party components and their notices are listed in
+[THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md). Note that `libgit2` is
+vendored under GPL-2.0 **with** the linking exception, which is what permits
+linking it from an MIT project.

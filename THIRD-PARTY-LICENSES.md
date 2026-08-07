@@ -18,3 +18,16 @@ Lucide is a fork of Feather Icons, Copyright (c) 2013-2022 Cole Bemis.
 ## Rust crates
 See `cargo license` output; notable: git2 (MIT/Apache-2.0), rusqlite (MIT),
 keyring (MIT/Apache-2.0), portable-pty (MIT), reqwest (MIT/Apache-2.0).
+
+## libgit2 (vendored, via `git2`) — GPL-2.0 WITH GCC-exception-2.0
+Copyright (c) the libgit2 contributors — https://libgit2.org
+
+Vendored and statically linked. libgit2 carries a linking exception to GPL-2.0
+that permits linking from software under any licence, which is what allows this
+project to be MIT. Network features are disabled in this build.
+
+## SQLite (vendored, via `rusqlite`) — public domain
+https://sqlite.org/copyright.html
+
+## pdf.js (`pdfjs-dist`) — Apache-2.0
+Copyright (c) Mozilla Foundation — https://mozilla.github.io/pdf.js/

@@ -3,6 +3,7 @@ name = "workbench"
 version = "0.1.0"
 description = "Workbench — local-first research and coding environment"
 edition = "2021"
+license = "MIT"
 
 [[bin]]
 name = "workbench"
