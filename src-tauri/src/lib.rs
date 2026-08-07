@@ -113,7 +113,7 @@ pub fn run() {
             commands::tasks::chat_sessions,
             commands::tasks::chat_delete_session,
             commands::tasks::agent_resume_task,
-            commands::tasks::workspace_preamble,
+            commands::tasks::chat_title,
             commands::tasks::agent_commands,
             commands::tasks::agent_action,
             commands::review::review_task_diff,

@@ -1,6 +1,12 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
-import { describeMessage, extractDelta } from "../chat/normalize";
+import {
+  describeMessage,
+  extractDelta,
+  summarizeToolArgs,
+  toolResultText,
+} from "../chat/normalize";
+import { referenceFooter } from "../chat/mentions";
 import { composeMessage, type PromptTemplate } from "../commands/prompts";
 import {
   formatError,
@@ -15,6 +21,10 @@ export interface ToolRow {
   time: string;
   name: string;
   status: "running" | "ok" | "error";
+  /** One line of what the tool was asked to do. */
+  detail?: string;
+  /** One line of what it returned. */
+  output?: string;
 }
 
 export interface Turn {
@@ -62,7 +72,7 @@ interface ChatStore {
   setMode(t: PromptTemplate | null): void;
   setOneShot(t: PromptTemplate | null): void;
   refreshProfile(workspaceId: string | null): Promise<void>;
-  send(workspaceId: string, text: string): Promise<void>;
+  send(workspaceId: string, text: string, workspaceRoot?: string): Promise<void>;
   stop(force: boolean): Promise<void>;
   newConversation(): Promise<void>;
   loadSession(taskId: string): Promise<void>;
@@ -116,21 +126,20 @@ export const useChat = create<ChatStore>((set, get) => ({
     }
   },
 
-  send: async (workspaceId, text) => {
+  send: async (workspaceId, text, workspaceRoot) => {
     const { taskId, status, turns, mode, oneShot } = get();
 
-    // The agent runs WITH the workspace as its cwd but is never told so, and
-    // won't run `pwd` unprompted — asked to "review this project" it had no
-    // idea what "this" was. State it once, at the top of the conversation.
-    let preamble = "";
-    if (turns.length === 0) {
-      preamble = await ipc.workspacePreamble(workspaceId).catch(() => "");
-    }
-
+    // Workspace orientation is no longer attached here: it lives in the
+    // agent's system prompt (see `workspace_context`), so it holds for every
+    // turn and after a resume instead of only the first message.
+    //
     // The agent receives the composed instruction; the transcript shows what
-    // the user actually typed, so history stays readable.
-    const composed = preamble
-      ? `${preamble}\n\n---\n\n${composeMessage(text, mode, oneShot)}`
+    // the user actually typed, so history stays readable. `@file` mentions are
+    // resolved to absolute paths for the agent while staying as the user wrote
+    // them in the transcript.
+    const footer = workspaceRoot ? referenceFooter(text, workspaceRoot) : "";
+    const composed = footer
+      ? `${composeMessage(text, mode, oneShot)}\n\n${footer}`
       : composeMessage(text, mode, oneShot);
     set({ oneShot: null });
 
@@ -264,6 +273,40 @@ export const useChat = create<ChatStore>((set, get) => ({
   },
 }));
 
+/**
+ * Name a conversation after its first exchange, exactly once.
+ *
+ * Fired here rather than on send because a title wants the agent's reply too —
+ * "fix the resume bug" is a better label than "why doesn't this work". Best
+ * effort throughout: with no key the list still falls back to the user's own
+ * first message.
+ */
+const named = new Set<string>();
+async function nameOnce(taskId: string, get: Get) {
+  if (named.has(taskId)) return;
+  const turns = get().turns;
+  // One full exchange: the user asked and the agent answered.
+  if (turns.length < 2 || !turns.some((t) => t.role === "assistant" && t.text)) return;
+  named.add(taskId);
+  await ipc.chatTitle(taskId).catch(() => named.delete(taskId));
+  // Nudge the sessions list to re-read.
+  set_titleTick((n) => n + 1);
+}
+
+/** Bumped when a title lands, so the sessions panel refreshes. */
+let titleListeners: Array<(n: number) => void> = [];
+let titleTick = 0;
+function set_titleTick(fn: (n: number) => number) {
+  titleTick = fn(titleTick);
+  titleListeners.forEach((l) => l(titleTick));
+}
+export function onTitleChange(fn: (n: number) => void): () => void {
+  titleListeners.push(fn);
+  return () => {
+    titleListeners = titleListeners.filter((l) => l !== fn);
+  };
+}
+
 type Set = (partial: Partial<ChatStore>) => void;
 type Get = () => ChatStore;
 
@@ -318,7 +361,15 @@ function reduce(item: StreamItem, set: Set, get: Get) {
       set({ phase: "tools" });
       patchLast(get, set, (t) => ({
         ...t,
-        tools: [...t.tools, { time: now(), name: String(o.toolName ?? "tool"), status: "running" }],
+        tools: [
+          ...t.tools,
+          {
+            time: now(),
+            name: String(o.toolName ?? "tool"),
+            status: "running",
+            detail: summarizeToolArgs(o.args),
+          },
+        ],
       }));
       break;
 
@@ -329,7 +380,13 @@ function reduce(item: StreamItem, set: Set, get: Get) {
         const i = tools.findLastIndex(
           (r) => r.name === String(o.toolName ?? "tool") && r.status === "running",
         );
-        if (i >= 0) tools[i] = { ...tools[i], status: o.isError ? "error" : "ok" };
+        if (i >= 0) {
+          tools[i] = {
+            ...tools[i],
+            status: o.isError ? "error" : "ok",
+            output: toolResultText(o.result),
+          };
+        }
         return { ...t, tools };
       });
       break;
@@ -354,7 +411,9 @@ function reduce(item: StreamItem, set: Set, get: Get) {
       patchLast(get, set, (t) => ({ ...t, streaming: false }));
       if (get().status !== "failed") set({ status: "awaiting-input", phase: "complete" });
       const { taskId, turns } = get();
-      if (taskId) void persistAll(taskId, turns);
+      if (taskId) {
+        void persistAll(taskId, turns).then(() => nameOnce(taskId, get));
+      }
       break;
     }
 

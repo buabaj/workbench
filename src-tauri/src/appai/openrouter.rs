@@ -399,3 +399,109 @@ mod tests {
         assert_eq!(info.context_length, None);
     }
 }
+
+/// A short text completion, used for internal jobs like naming a conversation.
+///
+/// Model fallback mirrors `transcribe`: try each in turn, but give up
+/// immediately on a timeout or an offline network, since neither improves on
+/// the next model.
+pub async fn complete(
+    key: &SecretString,
+    models: &[String],
+    system: &str,
+    user: &str,
+    max_tokens: u32,
+    privacy: PrivacyMode,
+    timeout_ms: u64,
+) -> Result<String, AppAiError> {
+    let mut last = AppAiError::Other("no models configured".into());
+    for model in models {
+        match complete_one(key, model, system, user, max_tokens, privacy, timeout_ms).await {
+            Ok(text) => return Ok(text),
+            Err(e @ (AppAiError::Timeout(_) | AppAiError::Offline)) => return Err(e),
+            Err(e) => {
+                tracing::warn!(model, error = %e, "completion model failed, trying next");
+                last = e;
+            }
+        }
+    }
+    Err(last)
+}
+
+pub fn completion_body(
+    model: &str,
+    system: &str,
+    user: &str,
+    max_tokens: u32,
+    privacy: PrivacyMode,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "model": model,
+        "max_tokens": max_tokens,
+        // Deterministic: the same conversation should not be renamed on a retry.
+        "temperature": 0,
+        "messages": [
+            { "role": "system", "content": system },
+            { "role": "user", "content": user },
+        ],
+    });
+    if let Some(provider) = privacy.provider_block() {
+        body["provider"] = provider;
+    }
+    body
+}
+
+#[derive(serde::Deserialize)]
+struct CompletionChoice {
+    message: CompletionMessage,
+}
+#[derive(serde::Deserialize)]
+struct CompletionMessage {
+    #[serde(default)]
+    content: Option<String>,
+}
+#[derive(serde::Deserialize)]
+struct CompletionResponse {
+    #[serde(default)]
+    choices: Vec<CompletionChoice>,
+}
+
+async fn complete_one(
+    key: &SecretString,
+    model: &str,
+    system: &str,
+    user: &str,
+    max_tokens: u32,
+    privacy: PrivacyMode,
+    timeout_ms: u64,
+) -> Result<String, AppAiError> {
+    let body = completion_body(model, system, user, max_tokens, privacy);
+    let resp = client(timeout_ms)?
+        .post(format!("{BASE}/chat/completions"))
+        .bearer_auth(key.expose())
+        .header("X-OpenRouter-Title", TITLE)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| map_reqwest(e, timeout_ms))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let detail = resp.text().await.unwrap_or_default();
+        return Err(AppAiError::Http {
+            status: status.as_u16(),
+            message: crate::secret::redact(&detail),
+        });
+    }
+    let parsed: CompletionResponse = resp.json().await.map_err(|_| AppAiError::Decode)?;
+    let text = parsed
+        .choices
+        .into_iter()
+        .next()
+        .and_then(|c| c.message.content)
+        .unwrap_or_default();
+    if text.trim().is_empty() {
+        return Err(AppAiError::Other("empty completion".into()));
+    }
+    Ok(text)
+}

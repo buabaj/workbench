@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, MessageSquare, Trash2 } from "lucide-react";
 import { ipc, type SessionSummary } from "../ipc/client";
-import { useChat } from "../store/chat";
+import { onTitleChange, useChat } from "../store/chat";
 import { useWorkspace } from "../store/workspace";
 
 /** Recent conversations stay visible; the tail is one click away. Showing 50
@@ -90,6 +90,9 @@ export function SessionsPanel() {
   };
 
   useEffect(reload, [workspace?.id, currentTask, turnCount]);
+  // A title is generated after the conversation's first exchange; refresh so
+  // the row stops showing the raw first message.
+  useEffect(() => onTitleChange(reload), [workspace?.id]);
 
   if (!workspace) return <div className="panel-empty">Open a workspace.</div>;
   if (sessions.length === 0) {

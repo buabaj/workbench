@@ -71,9 +71,15 @@ pub async fn agent_start_task(
         )?
     };
 
+    let ws_context = {
+        let conn = state.db.lock().expect("db lock");
+        workspace_context(&conn, &workspace_id)
+    };
+
     let (plan, task_row) = {
         let ws_id = workspace_id.clone();
         let cwd_for_plan = cwd.clone();
+        let ws_context = ws_context.clone();
         let t_id = task_id.clone();
         let prompt_clone = prompt.clone();
         let session_dir = session_dir.clone();
@@ -99,6 +105,7 @@ pub async fn agent_start_task(
                 path_env: resolved.path_env.clone(),
                 session_dir: &session_dir,
                 workspace_root: std::path::Path::new(&cwd_for_plan),
+                workspace_context: &ws_context,
             };
             let plan = build_spawn_plan(&conn, keychain.as_ref(), &profile.id, &t_id, &ctx)
                 .map_err(|e| AppError::Internal(crate::secret::redact(&e.to_string())))?;
@@ -357,8 +364,19 @@ pub fn chat_sessions(
     workspace_id: String,
 ) -> Result<Vec<SessionSummary>, AppError> {
     let conn = state.db.lock().expect("db lock");
+    // Prefer the generated title; then the first thing the USER typed, which
+    // is stored raw in chat_turns; and only then prompt_text, which holds the
+    // composed message and is identical across conversations sharing a mode.
     let mut stmt = conn.prepare(
-        "SELECT t.id, t.prompt_text, t.status, t.created_at,
+        "SELECT t.id,
+                COALESCE(
+                  NULLIF(t.title, ''),
+                  (SELECT c.text FROM chat_turns c
+                    WHERE c.task_id = t.id AND c.role = 'user' AND TRIM(c.text) <> ''
+                    ORDER BY c.seq LIMIT 1),
+                  t.prompt_text
+                ),
+                t.status, t.created_at,
                 (SELECT count(*) FROM chat_turns c WHERE c.task_id = t.id)
            FROM tasks t
           WHERE t.workspace_id = ?1
@@ -367,10 +385,10 @@ pub fn chat_sessions(
     )?;
     let rows = stmt
         .query_map([&workspace_id], |r| {
-            let prompt: String = r.get(1)?;
+            let label: String = r.get(1)?;
             Ok(SessionSummary {
                 task_id: r.get(0)?,
-                title: prompt.chars().take(80).collect(),
+                title: label.chars().take(80).collect(),
                 status: r.get(2)?,
                 created_at: r.get(3)?,
                 turn_count: r.get(4)?,
@@ -559,6 +577,10 @@ pub async fn agent_resume_task(
     let session_dir = data_dir.join("workspaces").join(&workspace_id).join("agent-sessions");
     std::fs::create_dir_all(&session_dir)?;
 
+    let ws_context = {
+        let conn = state.db.lock().expect("db lock");
+        workspace_context(&conn, &workspace_id)
+    };
     let db = state.db.clone();
     let keychain = state.keychain.clone();
     let t_id = task_id.clone();
@@ -583,6 +605,7 @@ pub async fn agent_resume_task(
             path_env: resolved.path_env.clone(),
             session_dir: &session_dir,
             workspace_root: std::path::Path::new(&cwd_plan),
+            workspace_context: &ws_context,
         };
         build_spawn_plan(&conn, keychain.as_ref(), &profile_id, &t_id, &ctx)
             .map_err(|e| AppError::Internal(crate::secret::redact(&e.to_string())))
@@ -633,38 +656,181 @@ fn task_view(state: &State<'_, AppState>, task_id: &str) -> Result<TaskView, App
     )?)
 }
 
-/// A short preamble sent with the FIRST message of a conversation.
+/// Orientation for the agent: what this project is and where it lives.
 ///
-/// The agent runs with the workspace as its working directory, but nothing
-/// told it so — asked to "review this project" it had no idea what "this"
-/// referred to, and would not think to run `pwd` first. This states it.
-#[tauri::command]
-pub fn workspace_preamble(
-    state: State<'_, AppState>,
-    workspace_id: String,
-) -> Result<String, AppError> {
-    let (name, root, kind): (String, String, String) = {
-        let conn = state.db.lock().expect("db lock");
-        conn.query_row(
-            "SELECT name, root_real, kind FROM workspaces WHERE id = ?1",
-            [&workspace_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-        )
-        .map_err(|_| AppError::NotFound("workspace".into()))?
+/// Appended to the SYSTEM PROMPT at spawn, not sent as a first message. The
+/// agent runs with the workspace as its working directory but was never told
+/// so, and will not run `pwd` unprompted — asked to "review this project" it
+/// had nothing to resolve "this" against. Putting it in the system prompt is
+/// what makes it true on every turn and after a resume, rather than for a
+/// single message that later turns forget.
+pub fn workspace_context(conn: &rusqlite::Connection, workspace_id: &str) -> String {
+    let row: rusqlite::Result<(String, String, String)> = conn.query_row(
+        "SELECT name, root_real, kind FROM workspaces WHERE id = ?1",
+        [workspace_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    );
+    let Ok((name, root, kind)) = row else {
+        return String::new();
     };
 
     let mut lines = vec![
-        "You are running inside Workbench, a desktop development environment."
+        format!("You are running inside Workbench, working on the project \"{name}\"."),
+        format!("Its root directory is: {root}"),
+        "That directory is your working directory. When the user says \"this project\", \
+         \"this workspace\", \"the codebase\", \"this repo\", or \"here\", they mean it, \
+         and relative paths resolve from it."
             .to_string(),
-        format!("Project: {name}"),
-        format!("Working directory: {root}"),
     ];
     if kind == "git" {
-        lines.push("This directory is a git repository.".into());
+        lines.push(format!(
+            "It is a git repository, so `git -C {root} status` and similar commands work."
+        ));
     }
     lines.push(
-        "When the user says \"this project\", \"the workspace\", \"the codebase\", or \"here\",          they mean that directory. All relative paths resolve from it. Read the          actual files before answering questions about the code."
-            .into(),
+        "Answer questions about the code by reading the actual files there first, \
+         rather than assuming a layout."
+            .to_string(),
     );
-    Ok(lines.join("\n"))
+    lines.join("\n")
+}
+
+/// Tidy a model-written title into something that fits a 300px list row.
+///
+/// Small models like to answer with a full sentence, wrap the title in quotes,
+/// or prefix it with "Title:" no matter how firmly the prompt says otherwise,
+/// so the output is treated as untrusted text rather than a value.
+pub fn clean_title(raw: &str) -> String {
+    let mut s = raw.trim().lines().next().unwrap_or("").trim().to_string();
+    for prefix in ["title:", "Title:", "TITLE:"] {
+        if let Some(rest) = s.strip_prefix(prefix) {
+            s = rest.trim().to_string();
+        }
+    }
+    s = s
+        .trim_matches(|c: char| c == '"' || c == '\'' || c == '`' || c == '*')
+        .trim()
+        .to_string();
+    // A trailing full stop reads oddly in a list; other punctuation is fine.
+    s = s.trim_end_matches('.').trim().to_string();
+    if s.chars().count() > 60 {
+        s = s.chars().take(59).collect::<String>().trim_end().to_string();
+        s.push('…');
+    }
+    s
+}
+
+const TITLE_SYSTEM: &str = "You name conversations. Reply with a title of 3 to 6 words \
+naming the specific subject discussed. No quotes, no punctuation at the end, no preamble, \
+no filler like \"discussion about\" or \"help with\". Use the concrete nouns from the \
+conversation. Reply with the title alone.";
+
+/// Name a conversation from what was actually said in it.
+///
+/// Titles used to be the first 80 characters of `tasks.prompt_text`, which is
+/// the COMPOSED message — mode template included — so every conversation
+/// started in the same mode was labelled identically. Generation is best
+/// effort: without a key, or offline, the list falls back to the first thing
+/// the user typed, which is still specific to that conversation.
+#[tauri::command]
+pub async fn chat_title(state: State<'_, AppState>, task_id: String) -> Result<String, AppError> {
+    let (workspace_root, transcript) = {
+        let conn = state.db.lock().expect("db lock");
+        let root: String = conn
+            .query_row(
+                "SELECT w.root_real FROM tasks t JOIN workspaces w ON w.id = t.workspace_id
+                  WHERE t.id = ?1",
+                [&task_id],
+                |r| r.get(0),
+            )
+            .map_err(|_| AppError::NotFound("task".into()))?;
+
+        // The opening exchange is what a title should describe; later turns
+        // wander, and sending the whole conversation costs tokens for nothing.
+        let mut stmt = conn.prepare(
+            "SELECT role, text FROM chat_turns WHERE task_id = ?1 ORDER BY seq LIMIT 4",
+        )?;
+        let rows: Vec<(String, String)> = stmt
+            .query_map([&task_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        let text = rows
+            .iter()
+            .filter(|(_, t)| !t.trim().is_empty())
+            .map(|(role, t)| {
+                let body: String = t.chars().take(600).collect();
+                format!("{role}: {body}")
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        (root, text)
+    };
+
+    if transcript.trim().is_empty() {
+        return Err(AppError::Validation("conversation is empty".into()));
+    }
+
+    let key = crate::appai::dotenv::lookup("OPENROUTER_API_KEY", Some(std::path::Path::new(&workspace_root)))
+        .ok_or_else(|| AppError::from(crate::appai::AppAiError::NoCredential))?;
+
+    let models: Vec<String> = crate::appai::registry::get("chat.title")
+        .map(|s| s.default_models.iter().map(|m| m.to_string()).collect())
+        .unwrap_or_default();
+
+    let raw = crate::appai::openrouter::complete(
+        &key,
+        &models,
+        TITLE_SYSTEM,
+        &transcript,
+        32,
+        crate::appai::openrouter::PrivacyMode::parse("balanced"),
+        20_000,
+    )
+    .await?;
+
+    let title = clean_title(&raw);
+    if title.is_empty() {
+        return Err(AppError::Internal("model returned an empty title".into()));
+    }
+    {
+        let conn = state.db.lock().expect("db lock");
+        conn.execute(
+            "UPDATE tasks SET title = ?1 WHERE id = ?2",
+            rusqlite::params![&title, &task_id],
+        )?;
+    }
+    Ok(title)
+}
+
+#[cfg(test)]
+mod title_tests {
+    use super::clean_title;
+
+    #[test]
+    fn strips_the_wrappers_small_models_add() {
+        assert_eq!(clean_title("\"Session resume bug\""), "Session resume bug");
+        assert_eq!(clean_title("Title: Session resume bug"), "Session resume bug");
+        assert_eq!(clean_title("**Session resume bug**"), "Session resume bug");
+        assert_eq!(clean_title("Session resume bug."), "Session resume bug");
+    }
+
+    #[test]
+    fn keeps_only_the_first_line() {
+        assert_eq!(
+            clean_title("Session resume bug\n\nThis conversation was about…"),
+            "Session resume bug"
+        );
+    }
+
+    #[test]
+    fn truncates_to_something_a_list_row_can_show() {
+        let out = clean_title(&"word ".repeat(40));
+        assert!(out.chars().count() <= 60, "got {} chars", out.chars().count());
+        assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn empty_stays_empty_so_the_caller_can_fall_back() {
+        assert_eq!(clean_title("   "), "");
+        assert_eq!(clean_title("\"\""), "");
+    }
 }

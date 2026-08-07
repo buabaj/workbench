@@ -337,9 +337,9 @@ export const ipc = {
   chatSessions: (workspaceId: string) => invoke<SessionSummary[]>("chat_sessions", { workspaceId }),
   chatDeleteSession: (taskId: string) => invoke<void>("chat_delete_session", { taskId }),
 
-  /** Tells the agent where it is. Sent once, with the first message. */
-  workspacePreamble: (workspaceId: string) =>
-    invoke<string>("workspace_preamble", { workspaceId }),
+  /** Name a conversation from its opening exchange, using the internal model. */
+  chatTitle: (taskId: string) => invoke<string>("chat_title", { taskId }),
+
   agentCommands: (taskId: string | null) => invoke<AgentCommand[]>("agent_commands", { taskId }),
   agentAction: (taskId: string, action: string, argument: string | null) =>
     invoke<unknown>("agent_action", { taskId, action, argument }),

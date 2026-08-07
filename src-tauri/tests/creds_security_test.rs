@@ -97,6 +97,7 @@ fn spawn_ctx<'a>(
         path_env: "/usr/bin:/bin".into(),
         session_dir,
         workspace_root: session_dir,
+        workspace_context: "",
     }
 }
 

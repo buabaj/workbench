@@ -27,6 +27,22 @@ pub const CAPABILITIES: &[CapabilitySpec] = &[
         ],
     },
     CapabilitySpec {
+        key: "chat.title",
+        display_name: "Conversation titles",
+        implemented: true,
+        required_input: &["text"],
+        required_output: &["text"],
+        // Cheap and fast: this runs once per conversation and the output is
+        // half a dozen words.
+        // Verified live against OpenRouter's catalogue — an id that 404s
+        // burns the whole fallback chain silently.
+        default_models: &[
+            "google/gemini-3.5-flash-lite",
+            "openai/gpt-4o-mini",
+            "anthropic/claude-haiku-4.5",
+        ],
+    },
+    CapabilitySpec {
         key: "transcript.cleanup",
         display_name: "Transcript cleanup",
         implemented: false,

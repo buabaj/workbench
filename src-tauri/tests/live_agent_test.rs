@@ -89,6 +89,7 @@ async fn spawn_plan_launches_a_working_agent() {
         path_env: std::env::var("PATH").unwrap_or_default(),
         session_dir: &sessions,
         workspace_root: &sessions,
+        workspace_context: "",
     };
     let plan = build_spawn_plan(&conn, &kc, &profile.id, "live-task", &ctx).unwrap();
 

@@ -20,34 +20,69 @@ function Tools({ tools }: { tools: Turn["tools"] }) {
   return (
     <div style={{ margin: "var(--s-2) 0 var(--s-3)" }}>
       {tools.map((row, i) => (
-        <div
-          key={i}
-          style={{
-            display: "flex",
-            gap: "var(--s-2)",
-            alignItems: "baseline",
-            fontSize: "var(--text-xs)",
-            fontFamily: "var(--mono)",
-            color: "var(--ink-muted)",
-            padding: "2px 0",
-          }}
-        >
-          <span style={{ color: "var(--ink-faint)", flexShrink: 0 }}>{row.time}</span>
-          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{row.name}</span>
-          <span
+        <div key={i} style={{ padding: "2px 0" }}>
+          <div
             style={{
-              display: "inline-flex",
-              color:
-                row.status === "ok"
-                  ? "var(--diff-add)"
-                  : row.status === "error"
-                    ? "var(--error)"
-                    : "var(--ink-faint)",
+              display: "flex",
+              gap: "var(--s-2)",
+              alignItems: "baseline",
+              fontSize: "var(--text-xs)",
+              fontFamily: "var(--mono)",
+              color: "var(--ink-muted)",
             }}
           >
-            {row.status === "running" ? "…" : row.status === "ok" ? <Check size={12} /> : <X size={12} />}
-            <span className="sr-only">{row.status}</span>
-          </span>
+            <span style={{ color: "var(--ink-faint)", flexShrink: 0 }}>{row.time}</span>
+            <span style={{ flexShrink: 0 }}>{row.name}</span>
+            {/* What the tool was asked to do. This used to reach the user by
+                accident, as streamed JSON spliced into the reply. */}
+            {row.detail && (
+              <span
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  color: "var(--ink-faint)",
+                }}
+                title={row.detail}
+              >
+                {row.detail}
+              </span>
+            )}
+            <span
+              style={{
+                display: "inline-flex",
+                marginLeft: row.detail ? 0 : "auto",
+                flexShrink: 0,
+                color:
+                  row.status === "ok"
+                    ? "var(--diff-add)"
+                    : row.status === "error"
+                      ? "var(--error)"
+                      : "var(--ink-faint)",
+              }}
+            >
+              {row.status === "running" ? "…" : row.status === "ok" ? <Check size={12} /> : <X size={12} />}
+              <span className="sr-only">{row.status}</span>
+            </span>
+          </div>
+          {row.output && (
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: "var(--text-xs)",
+                color: "var(--ink-faint)",
+                paddingLeft: "calc(var(--s-2) * 2 + 4.5em)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={row.output}
+            >
+              {row.output}
+            </div>
+          )}
         </div>
       ))}
     </div>

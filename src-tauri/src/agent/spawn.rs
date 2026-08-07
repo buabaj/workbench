@@ -101,6 +101,9 @@ pub struct SpawnContext<'a> {
     pub session_dir: &'a Path,
     /// The workspace the agent operates in — its working directory.
     pub workspace_root: &'a Path,
+    /// Orientation appended to the system prompt: what this project is and
+    /// where it lives. Empty to omit.
+    pub workspace_context: &'a str,
 }
 
 pub fn build_spawn_plan(
@@ -127,6 +130,13 @@ pub fn build_spawn_plan(
     args.push(ctx.workspace_root.to_string_lossy().into_owned());
     args.push("--session-dir".into());
     args.push(ctx.session_dir.to_string_lossy().into_owned());
+    // In the system prompt, not in the first message: the agent needs to know
+    // where it is on EVERY turn, including after a resume, and a preamble
+    // attached to one message is forgotten by the next one.
+    if !ctx.workspace_context.is_empty() {
+        args.push("--append-system-prompt".into());
+        args.push(ctx.workspace_context.to_string());
+    }
     if let Some(model) = &model_id {
         args.push("--model".into());
         args.push(model.clone());

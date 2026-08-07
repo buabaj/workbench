@@ -18,6 +18,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/0005_links.sql"),
     include_str!("migrations/0006_appai.sql"),
     include_str!("migrations/0007_chat.sql"),
+    include_str!("migrations/0008_task_title.sql"),
 ];
 
 /// Current unix time in milliseconds — the app's single timestamp convention.

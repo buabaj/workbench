@@ -10,6 +10,8 @@ import { Palette, type PaletteMode } from "./components/Palette";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { SessionsPanel } from "./components/SessionsPanel";
 import { SettingsView } from "./components/SettingsView";
+import { applyMention, mentionQueryAt } from "./chat/mentions";
+import { MentionMenu } from "./components/MentionMenu";
 import { SlashMenu } from "./components/SlashMenu";
 import { TabStrip } from "./components/TabStrip";
 import { VoiceButton } from "./components/VoiceButton";
@@ -147,6 +149,29 @@ export default function App() {
   // A leading "/" with no space yet means the user is picking a command.
   const slashQuery = /^\/[^\s]*$/.test(prompt) ? prompt : null;
 
+  // An "@" token under the caret means the user is referencing a file.
+  const [caret, setCaret] = useState(0);
+  const mention = slashQuery ? null : mentionQueryAt(prompt, caret);
+
+  const pickMention = useCallback(
+    (relPath: string) => {
+      const q = mentionQueryAt(prompt, caret);
+      if (!q) return;
+      const next = applyMention(prompt, q, relPath);
+      setPrompt(next.text);
+      // Restore the caret after React has written the new value, or it jumps
+      // to the end and the next @ lands in the wrong place.
+      requestAnimationFrame(() => {
+        const el = promptRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(next.caret, next.caret);
+        setCaret(next.caret);
+      });
+    },
+    [prompt, caret],
+  );
+
   const runCommand = async (cmd: AgentCommand) => {
     // Our own templates: a mode sticks, a command applies to the next message.
     if (cmd.kind === "mode" || cmd.kind === "command") {
@@ -192,7 +217,7 @@ export default function App() {
     const p = prompt.trim();
     setPrompt("");
     focusChat(); // sending from a file tab lands you where the answer appears
-    void sendMessage(workspace.id, p);
+    void sendMessage(workspace.id, p, workspace.rootPath);
   };
 
   return (
@@ -357,6 +382,13 @@ export default function App() {
                 onClose={() => setPrompt("")}
               />
             )}
+            {mention && (
+              <MentionMenu
+                query={mention.query}
+                onPick={pickMention}
+                onClose={() => setCaret(-1)}
+              />
+            )}
             <textarea
               ref={promptRef}
               className="composer-input"
@@ -364,10 +396,14 @@ export default function App() {
               placeholder={workspace ? PLACEHOLDER : "Open a workspace to run tasks"}
               value={prompt}
               disabled={!workspace || busy}
-              onChange={(e) => setPrompt(e.target.value)}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                setCaret(e.target.selectionStart ?? e.target.value.length);
+              }}
+              onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
               onKeyDown={(e) => {
-                // While the slash menu is open it owns Enter/arrows.
-                if (slashQuery) return;
+                // While a menu is open it owns Enter/arrows.
+                if (slashQuery || mention) return;
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   submit();
@@ -401,18 +437,23 @@ export default function App() {
             <section className="panel" aria-labelledby="p-agent">
               <h3 id="p-agent">Agent</h3>
               <div className="card">
+                {/* The model leads, because that is what the panel is
+                    identifying. Stacking the phase over a credential label
+                    read as "Done / openai key" — two unrelated facts with no
+                    relationship shown between them. */}
                 <div className="state-row">
                   <AgentOrb phase={chatPhase} />
-                  <div style={{ flex: 1 }}>
-                    <div className="state-label" role="status" aria-live="polite">
-                      {PHASE_LABEL[chatPhase]}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      className="state-label"
+                      style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      title={resolvedProfile?.profile.modelId ?? undefined}
+                    >
+                      {resolvedProfile?.profile.modelId ?? "No model configured"}
                     </div>
-                    <div className="state-sub">
-                      {resolvedProfile
-                        ? `${resolvedProfile.profile.label}${
-                            resolvedProfile.profile.modelId ? ` · ${resolvedProfile.profile.modelId}` : ""
-                          }`
-                        : "no provider configured"}
+                    <div className="state-sub" role="status" aria-live="polite">
+                      {PHASE_LABEL[chatPhase]}
+                      {resolvedProfile ? ` · via ${resolvedProfile.profile.label}` : ""}
                     </div>
                   </div>
                 </div>
