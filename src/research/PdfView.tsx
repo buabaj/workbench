@@ -30,6 +30,32 @@ const RENDER_MARGIN = "600px";
 /** Rendered without waiting to be observed, so the reader is never blank. */
 const EAGER_PAGES = 3;
 
+/**
+ * Non-white pixels in a sample of the canvas.
+ *
+ * Sampled rather than scanned: a full readback of a 1500×2000 canvas per page
+ * would cost more than the render. A page of text has ink in its middle band,
+ * which is where this looks.
+ */
+function countInk(canvas: HTMLCanvasElement): number {
+  try {
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return -1; // no context at all is a different failure
+    const w = Math.min(canvas.width, 400);
+    const h = Math.min(canvas.height, 400);
+    const x = Math.max(0, Math.floor((canvas.width - w) / 2));
+    const y = Math.max(0, Math.floor(canvas.height * 0.25));
+    const { data } = ctx.getImageData(x, y, w, h);
+    let ink = 0;
+    for (let i = 0; i < data.length; i += 16) {
+      if (data[i + 3] > 8 && (data[i] < 240 || data[i + 1] < 240 || data[i + 2] < 240)) ink++;
+    }
+    return ink;
+  } catch {
+    return -1; // tainted or unreadable; not worth failing the page over
+  }
+}
+
 /** Loading must not hang silently: a black rectangle is not a state. */
 const LOAD_TIMEOUT_MS = 30_000;
 
@@ -124,6 +150,21 @@ function Page({
         return;
       }
       if (cancelled) return;
+
+      // Verify something was actually drawn.
+      //
+      // Three attempts at this bug produced a blank page and no error, because
+      // a render that completes without painting reports success. Sampling the
+      // canvas turns "blank white" into a fact, and the numbers say which of
+      // the remaining explanations it is.
+      const ink = countInk(canvas);
+      if (ink === 0) {
+        setRenderErr(
+          `rendered 0 visible pixels — canvas ${canvas.width}×${canvas.height}, ` +
+            `viewport ${Math.round(viewport.width)}×${Math.round(viewport.height)}, dpr ${dpr}`,
+        );
+        return;
+      }
       setRenderErr(null);
 
       // Text layer: real DOM text, transparent, aligned over the canvas.
