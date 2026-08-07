@@ -27,6 +27,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 /** A page is rendered when it comes near the viewport, not all at once. */
 const RENDER_MARGIN = "600px";
 
+/** Rendered without waiting to be observed, so the reader is never blank. */
+const EAGER_PAGES = 3;
+
 /** Loading must not hang silently: a black rectangle is not a state. */
 const LOAD_TIMEOUT_MS = 30_000;
 
@@ -49,8 +52,13 @@ function Page({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textRef = useRef<HTMLDivElement | null>(null);
-  const [visible, setVisible] = useState(false);
+  // The first pages render unconditionally. Gating every page on an
+  // IntersectionObserver made correctness depend on the observer firing, and
+  // when it did not the reader showed a column of blank white rectangles with
+  // no error — indistinguishable from a broken PDF.
+  const [visible, setVisible] = useState(pageNumber <= EAGER_PAGES);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const [renderErr, setRenderErr] = useState<string | null>(null);
 
   // Reserve the page's space before it renders, so the scrollbar does not
   // lurch as pages fill in behind you.
@@ -68,14 +76,14 @@ function Page({
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    if (!host || visible) return;
     const io = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && setVisible(true)),
       { root: null, rootMargin: RENDER_MARGIN },
     );
     io.observe(host);
     return () => io.disconnect();
-  }, []);
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -107,21 +115,33 @@ function Page({
       });
       try {
         await task.promise;
-      } catch {
-        return; // superseded by a newer render
+      } catch (e) {
+        // A cancelled render is routine — the page was superseded. Anything
+        // else has to be shown: swallowing it leaves a blank white page and
+        // no way to tell why.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!cancelled && !/cancel/i.test(msg)) setRenderErr(msg);
+        return;
       }
       if (cancelled) return;
+      setRenderErr(null);
 
       // Text layer: real DOM text, transparent, aligned over the canvas.
-      const textHost = textRef.current;
-      if (textHost) {
-        textHost.replaceChildren();
-        const layer = new pdfjs.TextLayer({
-          textContentSource: await page.getTextContent(),
-          container: textHost,
-          viewport,
-        });
-        await layer.render();
+      // Its failure must not blank the page — the page is already drawn, and
+      // losing selection is a smaller loss than losing the document.
+      try {
+        const textHost = textRef.current;
+        if (textHost) {
+          textHost.replaceChildren();
+          const layer = new pdfjs.TextLayer({
+            textContentSource: await page.getTextContent(),
+            container: textHost,
+            viewport,
+          });
+          await layer.render();
+        }
+      } catch {
+        /* selection unavailable on this page */
       }
     })();
 
@@ -151,6 +171,23 @@ function Page({
       }}
     >
       <canvas ref={canvasRef} style={{ display: "block" }} />
+      {renderErr && (
+        <div
+          role="alert"
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "grid",
+            placeItems: "center",
+            padding: "var(--s-4)",
+            color: "var(--error)",
+            fontSize: "var(--text-xs)",
+            textAlign: "center",
+          }}
+        >
+          Page {pageNumber} failed to render: {renderErr}
+        </div>
+      )}
       <div
         ref={textRef}
         className="pdf-text-layer"
