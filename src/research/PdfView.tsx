@@ -85,6 +85,16 @@ function Page({
   const [visible, setVisible] = useState(pageNumber <= EAGER_PAGES);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [renderErr, setRenderErr] = useState<string | null>(null);
+  const [stats, setStats] = useState<{
+    ink: number;
+    cw: number;
+    ch: number;
+    cssW: number;
+    cssH: number;
+    vw: number;
+    vh: number;
+    dpr: number;
+  } | null>(null);
 
   // Reserve the page's space before it renders, so the scrollbar does not
   // lurch as pages fill in behind you.
@@ -151,20 +161,24 @@ function Page({
       }
       if (cancelled) return;
 
-      // Verify something was actually drawn.
+      // Report what happened, always.
       //
-      // Three attempts at this bug produced a blank page and no error, because
-      // a render that completes without painting reports success. Sampling the
-      // canvas turns "blank white" into a fact, and the numbers say which of
-      // the remaining explanations it is.
+      // The previous round reported only when nothing was drawn — and nothing
+      // appeared, which means ink WAS found and the page still looked white.
+      // That separates "pdf.js did not paint" from "the paint is not visible",
+      // and only the second is left. The badge is unconditional so the answer
+      // arrives whether or not the guess is right this time.
       const ink = countInk(canvas);
-      if (ink === 0) {
-        setRenderErr(
-          `rendered 0 visible pixels — canvas ${canvas.width}×${canvas.height}, ` +
-            `viewport ${Math.round(viewport.width)}×${Math.round(viewport.height)}, dpr ${dpr}`,
-        );
-        return;
-      }
+      setStats({
+        ink,
+        cw: canvas.width,
+        ch: canvas.height,
+        cssW: canvas.clientWidth,
+        cssH: canvas.clientHeight,
+        vw: Math.round(viewport.width),
+        vh: Math.round(viewport.height),
+        dpr,
+      });
       setRenderErr(null);
 
       // Text layer: real DOM text, transparent, aligned over the canvas.
@@ -211,7 +225,29 @@ function Page({
         borderRadius: 2,
       }}
     >
-      <canvas ref={canvasRef} style={{ display: "block" }} />
+      <canvas ref={canvasRef} style={{ display: "block", position: "relative", zIndex: 1 }} />
+      {stats && (
+        <div
+          // Deliberately loud and deliberately temporary: it exists to end a
+          // bug that has survived three fixes by looking identical each time.
+          style={{
+            position: "absolute",
+            top: 4,
+            left: 4,
+            zIndex: 3,
+            padding: "2px 6px",
+            background: "var(--clay)",
+            color: "#fff",
+            fontFamily: "var(--mono)",
+            fontSize: 10,
+            borderRadius: 3,
+            pointerEvents: "none",
+          }}
+        >
+          p{pageNumber} ink={stats.ink} canvas={stats.cw}×{stats.ch} css={stats.cssW}×
+          {stats.cssH} vp={stats.vw}×{stats.vh} dpr={stats.dpr}
+        </div>
+      )}
       {renderErr && (
         <div
           role="alert"
@@ -237,6 +273,11 @@ function Page({
           inset: 0,
           overflow: "hidden",
           lineHeight: 1,
+          // Explicitly above the canvas and explicitly transparent. An
+          // absolutely-positioned sibling with no z-index paints after the
+          // canvas, so anything opaque in it would hide a perfectly good page.
+          zIndex: 2,
+          background: "transparent",
           // Full opacity with TRANSPARENT text, not a transparent layer: the
           // selection highlight is painted on the layer, so fading the layer
           // would fade the highlight along with it and selecting would look
