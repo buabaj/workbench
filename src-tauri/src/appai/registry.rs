@@ -49,11 +49,14 @@ pub const CAPABILITIES: &[CapabilitySpec] = &[
         required_input: &["text"],
         required_output: &["text"],
         // Prose written into a document, so quality matters more than for a
-        // title, and the context window has to hold a paper.
+        // title, and the context window has to hold a paper — a paper note
+        // carrying extracted full text runs to 150KB, which is most of a
+        // smaller model's window before the request is even added.
+        // deepseek-v4-flash has a 1M window at $0.28/M, verified live.
         default_models: &[
+            "deepseek/deepseek-v4-flash",
             "anthropic/claude-haiku-4.5",
             "google/gemini-3.5-flash-lite",
-            "openai/gpt-4o-mini",
         ],
     },
     CapabilitySpec {

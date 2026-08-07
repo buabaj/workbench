@@ -799,7 +799,7 @@ pub async fn chat_title(state: State<'_, AppState>, task_id: String) -> Result<S
     )
     .await?;
 
-    let title = clean_title(&raw);
+    let title = clean_title(&raw.text);
     if title.is_empty() {
         return Err(AppError::Internal("model returned an empty title".into()));
     }
@@ -867,7 +867,7 @@ pub async fn note_action(
     workspace_id: String,
     instruction: String,
     context: String,
-) -> Result<String, AppError> {
+) -> Result<crate::appai::openrouter::Completion, AppError> {
     if instruction.trim().is_empty() {
         return Err(AppError::Validation("nothing was asked".into()));
     }
@@ -893,7 +893,9 @@ pub async fn note_action(
 
     // The note is the context; a long paper is truncated rather than refused,
     // since the instruction usually concerns what has been written so far.
-    const MAX_CONTEXT: usize = 60_000;
+    // Raised to fit a paper note with its extracted full text, which the
+    // primary model's 1M window has ample room for.
+    const MAX_CONTEXT: usize = 400_000;
     let context: String = context.chars().take(MAX_CONTEXT).collect();
     let user = format!("The document so far:\n\n{context}\n\n---\n\nRequest: {instruction}");
 
@@ -907,5 +909,11 @@ pub async fn note_action(
         90_000,
     )
     .await?;
-    Ok(out.trim().to_string())
+    // The model comes back with the text so the note can record which one
+    // wrote it. Marking generated prose with the model that was *asked* would
+    // misattribute every answer a fallback produced.
+    Ok(crate::appai::openrouter::Completion {
+        text: out.text.trim().to_string(),
+        model_served: out.model_served,
+    })
 }

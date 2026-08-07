@@ -405,6 +405,14 @@ mod tests {
 /// Model fallback mirrors `transcribe`: try each in turn, but give up
 /// immediately on a timeout or an offline network, since neither improves on
 /// the next model.
+/// A completion, and the model that produced it.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Completion {
+    pub text: String,
+    pub model_served: String,
+}
+
 pub async fn complete(
     key: &SecretString,
     models: &[String],
@@ -413,7 +421,7 @@ pub async fn complete(
     max_tokens: u32,
     privacy: PrivacyMode,
     timeout_ms: u64,
-) -> Result<String, AppAiError> {
+) -> Result<Completion, AppAiError> {
     let mut last = AppAiError::Other("no models configured".into());
     for model in models {
         match complete_one(key, model, system, user, max_tokens, privacy, timeout_ms).await {
@@ -464,6 +472,10 @@ struct CompletionMessage {
 struct CompletionResponse {
     #[serde(default)]
     choices: Vec<CompletionChoice>,
+    /// What actually answered. With a fallback chain the requested model and
+    /// the serving model differ, and recording the request would be a lie.
+    #[serde(default)]
+    model: Option<String>,
 }
 
 async fn complete_one(
@@ -474,7 +486,7 @@ async fn complete_one(
     max_tokens: u32,
     privacy: PrivacyMode,
     timeout_ms: u64,
-) -> Result<String, AppAiError> {
+) -> Result<Completion, AppAiError> {
     let body = completion_body(model, system, user, max_tokens, privacy);
     let resp = client(timeout_ms)?
         .post(format!("{BASE}/chat/completions"))
@@ -494,6 +506,7 @@ async fn complete_one(
         });
     }
     let parsed: CompletionResponse = resp.json().await.map_err(|_| AppAiError::Decode)?;
+    let served = parsed.model.clone().unwrap_or_else(|| model.to_string());
     let text = parsed
         .choices
         .into_iter()
@@ -503,5 +516,5 @@ async fn complete_one(
     if text.trim().is_empty() {
         return Err(AppAiError::Other("empty completion".into()));
     }
-    Ok(text)
+    Ok(Completion { text, model_served: served })
 }

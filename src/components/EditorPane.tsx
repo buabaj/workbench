@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { frontmatterField } from "../research/frontmatter";
 import { appendAnnotation, parseAnnotations, type Annotation } from "../research/annotations";
+import { ProvenanceBar } from "../research/ProvenanceBar";
 import { PdfView, type PdfSelection } from "../research/PdfView";
 import { SelectionBubble } from "../editor/SelectionBubble";
 import { useEditorSession } from "../editor/useEditorSession";
@@ -231,6 +232,14 @@ export function EditorPane() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       {phase === "conflict" && <ConflictBanner workspaceId={workspace.id} relPath={active} />}
+      {markdown && (
+        <ProvenanceBar
+          workspaceId={workspace.id}
+          relPath={active}
+          version={noteVersion}
+          onChanged={() => setNoteVersion((v) => v + 1)}
+        />
+      )}
       {pendingAnnotation && (
         <AnnotationComposer
           workspaceId={workspace.id}

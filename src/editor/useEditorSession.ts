@@ -6,6 +6,7 @@ import { editorRegistry } from "./editorRegistry";
 import { applyLanguage, codeExtensions, markdownExtras } from "./extensions";
 import { formatError, ipc, onFsChanged } from "../ipc/client";
 import { directiveAt } from "../research/agentDirective";
+import { markGenerated } from "../research/provenance";
 import { useLinks } from "../store/links";
 import { saveBuffer, useWorkspace } from "../store/workspace";
 
@@ -109,8 +110,16 @@ export function useEditorSession(workspaceId: string, relPath: string) {
         try {
           const out = await ipc.noteAction(workspaceId, d.instruction, text);
           const at = view.state.doc.toString().indexOf(busy, Math.max(0, d.start - 4));
-          if (at === -1) return true; // the document moved on; leave it alone
-          view.dispatch({ changes: { from: at, to: at + busy.length, insert: out.trim() } });
+          if (at === -1) return; // the document moved on; leave it alone
+          // Marked, not bare. Unmarked model output becomes indistinguishable
+          // from your own writing the moment you close the file, and there is
+          // no record to reconstruct it from later.
+          const marked = markGenerated(
+            out.text,
+            out.modelServed,
+            new Date().toISOString().slice(0, 10),
+          );
+          view.dispatch({ changes: { from: at, to: at + busy.length, insert: marked } });
         } catch (e) {
           // The reason goes IN THE NOTE, beside the restored directive.
           // Sending it to the console instead meant a missing key or a network

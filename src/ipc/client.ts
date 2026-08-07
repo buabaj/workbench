@@ -347,9 +347,14 @@ export const ipc = {
   worktreeChanges: (workspaceId: string) =>
     invoke<WorktreeChange[]>("worktree_changes", { workspaceId }),
   notesScan: (workspaceId: string) => invoke<NoteDoc[]>("notes_scan", { workspaceId }),
-  /** Run an `@agent[...]` directive written inside a note. */
+  /** Run an `@agent[...]` directive. Reports which model actually answered,
+   *  so the note can record it rather than the one that was asked. */
   noteAction: (workspaceId: string, instruction: string, context: string) =>
-    invoke<string>("note_action", { workspaceId, instruction, context }),
+    invoke<{ text: string; modelServed: string }>("note_action", {
+      workspaceId,
+      instruction,
+      context,
+    }),
   scholarSearch: (query: string, limit?: number) =>
     invoke<Paper[]>("scholar_search", { query, limit }),
   paperImport: (workspaceId: string, paper: Paper) =>

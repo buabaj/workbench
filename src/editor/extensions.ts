@@ -5,6 +5,7 @@ import {
   completionKeymap,
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { provenanceHighlight } from "./provenanceDecoration";
 import { vaultNotePaths, wikiSource } from "./wikiComplete";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import {
@@ -174,6 +175,9 @@ const base: Extension = [
  */
 export const markdownExtras = [
   markdownLanguage.data.of({ autocomplete: wikiSource(vaultNotePaths) }),
+  // Generated prose is marked in the file with HTML comments, which are
+  // invisible everywhere markdown is rendered. Here they must not be.
+  provenanceHighlight(),
 ];
 
 export function codeExtensions(): Extension {
