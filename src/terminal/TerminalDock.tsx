@@ -33,13 +33,21 @@ function themeFromTokens(): Record<string, string> {
   };
 }
 
-export function TerminalDock({ onClose }: { onClose: () => void }) {
+export function TerminalDock({
+  hidden = false,
+  onClose,
+}: {
+  /** Toggled out of view. The shell keeps running; only the pixels go away. */
+  hidden?: boolean;
+  onClose: () => void;
+}) {
   const workspace = useWorkspace((s) => s.workspace);
   const hostRef = useRef<HTMLDivElement>(null);
   // Kept in refs, not state: none of this should trigger a React render, and
   // the cleanup path must see the live values rather than a stale closure.
   const termRef = useRef<Terminal | null>(null);
   const ptyRef = useRef<string | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -60,6 +68,7 @@ export function TerminalDock({ onClose }: { onClose: () => void }) {
     term.open(host);
     fit.fit();
     termRef.current = term;
+    fitRef.current = fit;
 
     let disposed = false;
     const channel = new Channel<ArrayBuffer | number[]>();
@@ -104,6 +113,10 @@ export function TerminalDock({ onClose }: { onClose: () => void }) {
     // Keep the pty's idea of the window matching the rendered one, or
     // full-screen programs (vim, htop, less) draw at the wrong size.
     const ro = new ResizeObserver(() => {
+      // While hidden the host measures 0×0. Fitting to that would resize the
+      // pty to nothing and reflow the running program's output — so a hidden
+      // terminal is left exactly as the user left it.
+      if (!host.clientWidth || !host.clientHeight) return;
       try {
         fit.fit();
       } catch {
@@ -124,9 +137,35 @@ export function TerminalDock({ onClose }: { onClose: () => void }) {
       if (id) void invoke("pty_close", { ptyId: id }).catch(() => {});
       term.dispose();
       termRef.current = null;
+      fitRef.current = null;
       ptyRef.current = null;
     };
   }, [workspace?.id]);
+
+  // Re-measure on reveal. The dimensions xterm cached while hidden are stale,
+  // and the window may well have been resized in between.
+  useEffect(() => {
+    if (hidden) return;
+    const term = termRef.current;
+    const fit = fitRef.current;
+    const host = hostRef.current;
+    if (!term || !fit || !host) return;
+    // After layout, or the host still measures its hidden size.
+    const raf = requestAnimationFrame(() => {
+      if (!host.clientWidth || !host.clientHeight) return;
+      try {
+        fit.fit();
+      } catch {
+        return;
+      }
+      const id = ptyRef.current;
+      if (id) {
+        void invoke("pty_resize", { ptyId: id, cols: term.cols, rows: term.rows }).catch(() => {});
+      }
+      term.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [hidden]);
 
   return (
     <section
@@ -156,8 +195,8 @@ export function TerminalDock({ onClose }: { onClose: () => void }) {
         </span>
         <button
           className="btn icon"
-          aria-label="Close terminal"
-          title="Close terminal (⌃`)"
+          aria-label="Close terminal and end the shell"
+          title="Close and end this shell — ⌃` only hides it"
           onClick={onClose}
           style={{ padding: 3, color: "var(--ink-faint)" }}
         >

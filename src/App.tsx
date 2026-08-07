@@ -68,6 +68,8 @@ export default function App() {
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
   const [commandNote, setCommandNote] = useState<string | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  /** Mounted — and so still running — independently of being visible. */
+  const [terminalAlive, setTerminalAlive] = useState(false);
   const [terminalHeight, setTerminalHeight] = useState(260);
   const activeMode = useChat((s) => s.mode);
   const activeOneShot = useChat((s) => s.oneShot);
@@ -126,6 +128,7 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && !e.metaKey && e.key === "`") {
         e.preventDefault();
+        setTerminalAlive(true);
         setTerminalOpen((v) => !v);
         return;
       }
@@ -276,7 +279,10 @@ export default function App() {
         </button>
         <button
           className={`btn icon ${terminalOpen ? "on" : ""}`}
-          onClick={() => setTerminalOpen((v) => !v)}
+          onClick={() => {
+            setTerminalAlive(true);
+            setTerminalOpen((v) => !v);
+          }}
           aria-label="Toggle terminal"
           aria-pressed={terminalOpen}
           title="Terminal (⌃`)"
@@ -366,36 +372,6 @@ export default function App() {
             )}
           </ErrorBoundary>
         </main>
-
-        {terminalOpen && workspace && (
-          <>
-            <div
-              role="separator"
-              aria-orientation="horizontal"
-              aria-label="Resize terminal"
-              tabIndex={0}
-              onPointerDown={startTerminalDrag}
-              onKeyDown={(e) => {
-                // Keyboard-resizable too: a drag-only handle is unreachable.
-                if (e.key === "ArrowUp") setTerminalHeight((h) => clampTerminal(h + 24));
-                else if (e.key === "ArrowDown") setTerminalHeight((h) => clampTerminal(h - 24));
-                else return;
-                e.preventDefault();
-              }}
-              style={{
-                height: 5,
-                flexShrink: 0,
-                cursor: "row-resize",
-                background: "var(--border)",
-              }}
-            />
-            <div style={{ height: terminalHeight, flexShrink: 0, minHeight: 0 }}>
-              <ErrorBoundary>
-                <TerminalDock onClose={() => setTerminalOpen(false)} />
-              </ErrorBoundary>
-            </div>
-          </>
-        )}
 
         <footer className="composer">
           {voiceError && (
@@ -491,6 +467,57 @@ export default function App() {
             </button>
           </div>
         </footer>
+
+        {/* Below the composer, so the input and its controls always sit
+            directly under the conversation they belong to. Mounted while
+            `terminalAlive`, merely hidden while toggled off: unmounting kills
+            the shell, and a toggle that discards a running command is not a
+            toggle. The X button is the one that closes for real. */}
+        {terminalAlive && workspace && (
+          <>
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize terminal"
+              tabIndex={0}
+              hidden={!terminalOpen}
+              onPointerDown={startTerminalDrag}
+              onKeyDown={(e) => {
+                // Keyboard-resizable too: a drag-only handle is unreachable.
+                if (e.key === "ArrowUp") setTerminalHeight((h) => clampTerminal(h + 24));
+                else if (e.key === "ArrowDown") setTerminalHeight((h) => clampTerminal(h - 24));
+                else return;
+                e.preventDefault();
+              }}
+              style={{
+                height: 5,
+                flexShrink: 0,
+                cursor: "row-resize",
+                background: "var(--border)",
+                display: terminalOpen ? undefined : "none",
+              }}
+            />
+            <div
+              style={{
+                height: terminalOpen ? terminalHeight : 0,
+                flexShrink: 0,
+                minHeight: 0,
+                overflow: "hidden",
+                display: terminalOpen ? undefined : "none",
+              }}
+            >
+              <ErrorBoundary>
+                <TerminalDock
+                  hidden={!terminalOpen}
+                  onClose={() => {
+                    setTerminalOpen(false);
+                    setTerminalAlive(false);
+                  }}
+                />
+              </ErrorBoundary>
+            </div>
+          </>
+        )}
       </div>
 
       {inspectorOpen && (
