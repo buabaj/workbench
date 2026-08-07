@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, FilePlus, FolderPlus } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useLayout } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
 import { FileIcon, FolderIcon } from "../icons/fileIcon";
@@ -185,33 +185,19 @@ function CreateRow({
   );
 }
 
-export function FileTree() {
+/** `creating` is owned by the rail header, where the two buttons live. */
+export function FileTree({
+  creating = null,
+  onCreateDone,
+}: {
+  creating?: "file" | "dir" | null;
+  onCreateDone?: () => void;
+}) {
   const workspace = useWorkspace((s) => s.workspace);
-  const [creating, setCreating] = useState<"file" | "dir" | null>(null);
   if (!workspace) return null;
   return (
     <div>
-      <div style={{ display: "flex", gap: 2, padding: "0 6px 4px", justifyContent: "flex-end" }}>
-        <button
-          className="btn icon"
-          aria-label="New file"
-          title="New file"
-          onClick={() => setCreating("file")}
-          style={{ padding: 3, color: "var(--ink-faint)" }}
-        >
-          <FilePlus size={13} strokeWidth={1.7} />
-        </button>
-        <button
-          className="btn icon"
-          aria-label="New folder"
-          title="New folder"
-          onClick={() => setCreating("dir")}
-          style={{ padding: 3, color: "var(--ink-faint)" }}
-        >
-          <FolderPlus size={13} strokeWidth={1.7} />
-        </button>
-      </div>
-      {creating && <CreateRow kind={creating} onDone={() => setCreating(null)} />}
+      {creating && <CreateRow kind={creating} onDone={() => onCreateDone?.()} />}
       <div role="tree" aria-label="Workspace files">
         <Children subpath="" depth={0} />
       </div>

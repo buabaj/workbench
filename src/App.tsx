@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChatView, PLACEHOLDER } from "./components/ChatView";
-import { ArrowUp, Moon, PanelLeft, PanelRight, Settings, SquareTerminal, Sun, X } from "lucide-react";
+import {
+  ArrowUp,
+  FilePlus,
+  FolderPlus,
+  Moon,
+  PanelLeft,
+  PanelRight,
+  Settings,
+  SquareTerminal,
+  Sun,
+  X,
+} from "lucide-react";
 import { AgentOrb, PHASE_LABEL } from "./components/AgentOrb";
 import { EditorPane } from "./components/EditorPane";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -70,6 +81,7 @@ export default function App() {
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
   const [commandNote, setCommandNote] = useState<string | null>(null);
   const [railTab, setRailTab] = useState<"files" | "search" | "changes">("files");
+  const [creating, setCreating] = useState<"file" | "dir" | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
   /** Mounted — and so still running — independently of being visible. */
   const [terminalAlive, setTerminalAlive] = useState(false);
@@ -315,23 +327,46 @@ export default function App() {
           <ErrorBoundary>
             {workspace ? (
               <div className="rail-section">
-                {/* Files and Search share the rail rather than stacking: both
-                    want the full height, and stacked they would each get half. */}
-                <div style={{ display: "flex", gap: 2, marginBottom: "var(--s-2)" }}>
+                {/* Files, Search and Changes share the rail rather than
+                    stacking: each wants the full height. The tabs replace the
+                    section heading, so they carry its type, not a button's. */}
+                <div className="rail-tabs" role="tablist" aria-label="Rail">
                   {(["files", "search", "changes"] as const).map((t) => (
                     <button
                       key={t}
-                      className={`btn ${railTab === t ? "primary" : "quiet"}`}
-                      style={{ fontSize: "var(--text-xs)", textTransform: "capitalize", padding: "3px 10px" }}
-                      aria-pressed={railTab === t}
+                      role="tab"
+                      className={`rail-tab ${railTab === t ? "on" : ""}`}
+                      aria-selected={railTab === t}
                       onClick={() => setRailTab(t)}
                     >
                       {t}
                     </button>
                   ))}
+                  {railTab === "files" && (
+                    <span className="rail-tab-actions">
+                      <button
+                        className="btn icon"
+                        aria-label="New file"
+                        title="New file"
+                        onClick={() => setCreating("file")}
+                        style={{ padding: 2, color: "var(--ink-faint)" }}
+                      >
+                        <FilePlus size={13} strokeWidth={1.7} />
+                      </button>
+                      <button
+                        className="btn icon"
+                        aria-label="New folder"
+                        title="New folder"
+                        onClick={() => setCreating("dir")}
+                        style={{ padding: 2, color: "var(--ink-faint)" }}
+                      >
+                        <FolderPlus size={13} strokeWidth={1.7} />
+                      </button>
+                    </span>
+                  )}
                 </div>
                 {railTab === "files" ? (
-                  <FileTree />
+                  <FileTree creating={creating} onCreateDone={() => setCreating(null)} />
                 ) : railTab === "search" ? (
                   <SearchPanel />
                 ) : (
