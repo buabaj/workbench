@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { PreflightPanel } from "./Preflight";
-import { formatError, ipc, type AgentModel, type CredentialProfileView, type HostAuthSummary } from "../ipc/client";
+import {
+  formatError,
+  ipc,
+  type AgentModel,
+  type AgentProfileView,
+  type CredentialProfileView,
+  type HostAuthSummary,
+} from "../ipc/client";
 import { useChat } from "../store/chat";
 import { useTheme, type ThemeChoice } from "../store/theme";
 import { useWorkspace } from "../store/workspace";
@@ -147,6 +154,7 @@ export function SettingsView() {
   const setTheme = useTheme((s) => s.set);
   const workspace = useWorkspace((s) => s.workspace);
   const refreshProfile = useChat((s) => s.refreshProfile);
+  const resolvedProfile = useChat((s) => s.resolvedProfile);
 
   const [creds, setCreds] = useState<CredentialProfileView[]>([]);
   const [host, setHost] = useState<HostAuthSummary[]>([]);
@@ -162,6 +170,7 @@ export function SettingsView() {
   const reload = async () => {
     setCreds(await ipc.credsList().catch(() => []));
     setHost(await ipc.credsDiscoverHostAuth().catch(() => []));
+    setProfiles(await ipc.agentProfilesList().catch(() => []));
     const cap = await ipc.voiceCapability().catch(() => null);
     setVoiceLabel(cap?.configured ? (cap.credentialLabel ?? "configured") : null);
   };
@@ -206,6 +215,35 @@ export function SettingsView() {
   /** Ask the agent which models this credential can actually reach. Without an
    * explicit model, prime-agent falls back to a default that may belong to a
    * DIFFERENT provider — which is how work got billed to the wrong account. */
+  const [profiles, setProfiles] = useState<AgentProfileView[]>([]);
+
+  /**
+   * Make an existing credential the one work is billed to.
+   *
+   * Several can coexist — a ChatGPT subscription, a Claude subscription, an
+   * OpenRouter key for everything else — but switching between them was only
+   * possible by adding a credential again, because set-default was wired
+   * solely into the create path.
+   */
+  const useCredential = async (credentialId: string) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const profile = profiles.find((p) => p.credentialProfileId === credentialId);
+      if (!profile) {
+        setErr("That credential has no agent profile yet — re-add it to create one.");
+        return;
+      }
+      await ipc.profilesSetDefault(null, profile.id);
+      await refreshProfile(workspace?.id ?? null);
+      await reload();
+    } catch (e) {
+      setErr(formatError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const [modelsFor, setModelsFor] = useState<string | null>(null);
   const [chosen, setChosen] = useState<string | null>(null);
 
@@ -374,6 +412,26 @@ export function SettingsView() {
                   <span style={{ color: "var(--ink-faint)", fontFamily: "var(--mono)", fontSize: 11 }}>
                     {c.keyFingerprint ?? "host"}
                   </span>
+                  {resolvedProfile?.profile.credentialProfileId === c.id ? (
+                    <span
+                      style={{
+                        fontSize: "var(--text-xs)",
+                        color: "var(--clay-text)",
+                        flexShrink: 0,
+                      }}
+                    >
+                      in use
+                    </span>
+                  ) : (
+                    <button
+                      className="btn"
+                      style={{ fontSize: "var(--text-xs)" }}
+                      disabled={busy}
+                      onClick={() => void useCredential(c.id)}
+                    >
+                      Use
+                    </button>
+                  )}
                   <button className="btn" style={{ fontSize: "var(--text-xs)" }} disabled={loadingModels}
                           onClick={() => void loadModels(c.id)}>
                     {loadingModels ? "Checking…" : "Models"}
