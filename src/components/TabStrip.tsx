@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { ButterflyMark } from "./ButterflyMark";
 import { FileIcon } from "../icons/fileIcon";
 import { useLayout, type Tab } from "../store/layout";
@@ -86,7 +86,7 @@ function TabButton({ tab }: { tab: Tab }) {
   );
 }
 
-export function TabStrip() {
+export function TabStrip({ onNewConversation }: { onNewConversation: () => void }) {
   const tabs = useLayout((s) => s.tabs);
   return (
     <div
@@ -104,6 +104,15 @@ export function TabStrip() {
       {tabs.map((t) => (
         <TabButton key={t.id} tab={t} />
       ))}
+      <button
+        className="btn icon"
+        style={{ marginLeft: "auto" }}
+        onClick={onNewConversation}
+        aria-label="New conversation"
+        title="New conversation — ends the current agent session"
+      >
+        <Plus size={14} strokeWidth={1.8} />
+      </button>
     </div>
   );
 }

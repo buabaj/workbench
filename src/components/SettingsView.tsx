@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PreflightPanel } from "./Preflight";
 import { formatError, ipc, type AgentModel, type CredentialProfileView, type HostAuthSummary } from "../ipc/client";
-import { useTasks } from "../store/tasks";
+import { useChat } from "../store/chat";
 import { useTheme, type ThemeChoice } from "../store/theme";
 import { useWorkspace } from "../store/workspace";
 
@@ -138,7 +138,7 @@ export function SettingsView() {
   const themeChoice = useTheme((s) => s.choice);
   const setTheme = useTheme((s) => s.set);
   const workspace = useWorkspace((s) => s.workspace);
-  const refreshProfile = useTasks((s) => s.refreshProfile);
+  const refreshProfile = useChat((s) => s.refreshProfile);
 
   const [creds, setCreds] = useState<CredentialProfileView[]>([]);
   const [host, setHost] = useState<HostAuthSummary[]>([]);

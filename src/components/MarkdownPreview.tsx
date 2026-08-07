@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { marked } from "marked";
+import { useEffect, useState } from "react";
+import { Markdown } from "./Markdown";
 import { ipc } from "../ipc/client";
 import { editorRegistry } from "../editor/editorRegistry";
 
@@ -33,21 +33,9 @@ export function MarkdownPreview({
       .catch(() => setSource(null));
   }, [workspaceId, relPath]);
 
-  const html = useMemo(() => {
-    if (source === null) return null;
-    const escaped = source.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    return marked.parse(escaped, { async: false, gfm: true, breaks: false }) as string;
-  }, [source]);
-
-  if (html === null) {
+  if (source === null) {
     return <div style={{ padding: "var(--s-6)", color: "var(--ink-faint)" }}>Loading…</div>;
   }
 
-  return (
-    <div
-      className="md-preview"
-      // eslint-disable-next-line react/no-danger -- HTML is escaped by `marked`
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
+  return <Markdown source={source} className="md md-preview" />;
 }

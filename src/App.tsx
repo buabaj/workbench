@@ -1,53 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
-import { AgentActivity } from "./components/AgentActivity";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChatView, PLACEHOLDER } from "./components/ChatView";
 import { ArrowUp, Moon, PanelLeft, PanelRight, Settings, SquareTerminal, Sun } from "lucide-react";
-import { AgentOrb, PHASE_LABEL, phaseFromTask } from "./components/AgentOrb";
+import { AgentOrb, PHASE_LABEL } from "./components/AgentOrb";
 import { EditorPane } from "./components/EditorPane";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FileTree } from "./components/FileTree";
 import { LinksPanel } from "./components/LinksPanel";
 import { Palette, type PaletteMode } from "./components/Palette";
 import { ReviewPanel } from "./components/ReviewPanel";
+import { SessionsPanel } from "./components/SessionsPanel";
 import { SettingsView } from "./components/SettingsView";
+import { SlashMenu } from "./components/SlashMenu";
 import { TabStrip } from "./components/TabStrip";
 import { VoiceButton } from "./components/VoiceButton";
-import { ipc, onFsChanged, type WorkspaceView } from "./ipc/client";
+import { formatError, ipc, onFsChanged, type AgentCommand, type WorkspaceView } from "./ipc/client";
 import { useLayout } from "./store/layout";
 import { useTheme } from "./store/theme";
-import { useTasks } from "./store/tasks";
+import { useChat } from "./store/chat";
 import { useVoice } from "./store/voice";
 import { useWorkspace } from "./store/workspace";
-
-/** The centre when the chat tab is active: the conversation, at a reading
- *  measure, instead of a cramped box at the bottom of the window. */
-function ChatView() {
-  const status = useTasks((s) => s.status);
-  return (
-    <div style={{ maxWidth: "var(--w-chat)", margin: "0 auto", padding: "var(--s-8) var(--s-6)" }}>
-      {status === "idle" ? (
-        <div style={{ color: "var(--ink-muted)" }}>
-          <div
-            style={{
-              fontFamily: "var(--serif)",
-              fontVariationSettings: "var(--serif-settings)",
-              fontSize: "var(--display-sm)",
-              color: "var(--ink)",
-              letterSpacing: "var(--track-snug)",
-              marginBottom: "var(--s-2)",
-            }}
-          >
-            What are we working on?
-          </div>
-          <div style={{ fontSize: "var(--text-base)" }}>
-            Describe a task below, or open a file from the sidebar.
-          </div>
-        </div>
-      ) : (
-        <AgentActivity />
-      )}
-    </div>
-  );
-}
 
 export default function App() {
   const workspace = useWorkspace((s) => s.workspace);
@@ -71,11 +42,12 @@ export default function App() {
   const toggleTheme = useTheme((s) => s.toggle);
   const initTheme = useTheme((s) => s.init);
 
-  const taskStatus = useTasks((s) => s.status);
-  const matrix = useTasks((s) => s.matrix);
-  const resolvedProfile = useTasks((s) => s.resolvedProfile);
-  const refreshProfile = useTasks((s) => s.refreshProfile);
-  const runTask = useTasks((s) => s.runTask);
+  const chatStatus = useChat((s) => s.status);
+  const chatPhase = useChat((s) => s.phase);
+  const resolvedProfile = useChat((s) => s.resolvedProfile);
+  const refreshProfile = useChat((s) => s.refreshProfile);
+  const sendMessage = useChat((s) => s.send);
+  const newConversation = useChat((s) => s.newConversation);
 
   const voicePhase = useVoice((s) => s.phase);
   const voiceElapsed = useVoice((s) => s.elapsedMs);
@@ -87,8 +59,10 @@ export default function App() {
   const refreshVoiceCapability = useVoice((s) => s.refreshCapability);
 
   const [prompt, setPrompt] = useState("");
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
+  const [commandNote, setCommandNote] = useState<string | null>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
@@ -158,7 +132,45 @@ export default function App() {
     insertTranscript,
   ]);
 
-  const busy = taskStatus === "starting" || taskStatus === "running";
+  // Grow the composer with the text instead of scrolling it sideways. Reset to
+  // auto first so it shrinks back when lines are deleted.
+  useLayoutEffect(() => {
+    const el = promptRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+  }, [prompt]);
+
+  // A leading "/" with no space yet means the user is picking a command.
+  const slashQuery = /^\/[^\s]*$/.test(prompt) ? prompt : null;
+
+  const runCommand = async (cmd: AgentCommand) => {
+    if (cmd.kind === "skill") {
+      // Skills are interpreted by the agent, so they go into the prompt.
+      setPrompt(`/${cmd.name} `);
+      promptRef.current?.focus();
+      return;
+    }
+    setPrompt("");
+    if (cmd.name === "new") {
+      void newConversation();
+      return;
+    }
+    const id = useChat.getState().taskId;
+    if (!id) {
+      setCommandNote("Start a conversation first — there's no agent running yet.");
+      return;
+    }
+    try {
+      await ipc.agentAction(id, cmd.name, null);
+      setCommandNote(`/${cmd.name} ran.`);
+    } catch (e) {
+      setCommandNote(formatError(e));
+    }
+    window.setTimeout(() => setCommandNote(null), 4000);
+  };
+
+  const busy = chatStatus === "starting" || chatStatus === "streaming";
   const canRun = Boolean(workspace && resolvedProfile && prompt.trim() && !busy);
 
   const submit = () => {
@@ -166,7 +178,7 @@ export default function App() {
     const p = prompt.trim();
     setPrompt("");
     focusChat(); // sending from a file tab lands you where the answer appears
-    void runTask(workspace.id, p);
+    void sendMessage(workspace.id, p);
   };
 
   return (
@@ -271,7 +283,7 @@ export default function App() {
       )}
 
       <div className="center">
-        <TabStrip />
+        <TabStrip onNewConversation={() => void newConversation()} />
         <main className="canvas" aria-label="Main">
           <ErrorBoundary>
             {activeTab?.kind === "file" ? (
@@ -290,14 +302,30 @@ export default function App() {
               <span style={{ color: "var(--error)", fontSize: "var(--text-xs)" }}>{voiceError}</span>
             </div>
           )}
-          <div className="composer-row">
-            <input
+          {commandNote && (
+            <div className="composer-meta" role="status">
+              <span style={{ color: "var(--ink-muted)", fontSize: "var(--text-xs)" }}>{commandNote}</span>
+            </div>
+          )}
+          <div className="composer-row" style={{ position: "relative" }}>
+            {slashQuery && (
+              <SlashMenu
+                query={slashQuery}
+                onPick={(c) => void runCommand(c)}
+                onClose={() => setPrompt("")}
+              />
+            )}
+            <textarea
+              ref={promptRef}
               className="composer-input"
-              placeholder={workspace ? "Describe a task…" : "Open a workspace to run tasks"}
+              rows={1}
+              placeholder={workspace ? PLACEHOLDER : "Open a workspace to run tasks"}
               value={prompt}
               disabled={!workspace || busy}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => {
+                // While the slash menu is open it owns Enter/arrows.
+                if (slashQuery) return;
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   submit();
@@ -332,10 +360,10 @@ export default function App() {
               <h3 id="p-agent">Agent</h3>
               <div className="card">
                 <div className="state-row">
-                  <AgentOrb phase={phaseFromTask(taskStatus, matrix)} />
+                  <AgentOrb phase={chatPhase} />
                   <div style={{ flex: 1 }}>
                     <div className="state-label" role="status" aria-live="polite">
-                      {PHASE_LABEL[phaseFromTask(taskStatus, matrix)]}
+                      {PHASE_LABEL[chatPhase]}
                     </div>
                     <div className="state-sub">
                       {resolvedProfile
@@ -347,6 +375,10 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </section>
+            <section className="panel" aria-labelledby="p-sessions">
+              <h3 id="p-sessions">Conversations</h3>
+              <SessionsPanel />
             </section>
             <section className="panel" aria-labelledby="p-review">
               <h3 id="p-review">Task review</h3>

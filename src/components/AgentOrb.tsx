@@ -69,15 +69,3 @@ export function AgentOrb({
   );
 }
 
-/** Maps the task store's status + matrix onto a single phase. */
-export function phaseFromTask(
-  status: string,
-  matrix: string,
-): AgentPhase {
-  if (status === "starting") return "starting";
-  if (status === "failed") return "failed";
-  if (status === "cancelled") return "idle";
-  if (status === "succeeded") return "complete";
-  if (status === "running") return matrix === "running-tools" ? "tools" : "thinking";
-  return "idle";
-}

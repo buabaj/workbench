@@ -271,3 +271,237 @@ pub fn tasks_recent(
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatTurn {
+    pub id: String,
+    pub seq: i64,
+    pub role: String,
+    pub text: String,
+    pub error_text: Option<String>,
+    pub created_at: i64,
+}
+
+/// Append (or update) a turn. Called as turns complete, so history survives a
+/// reload without waiting for the whole conversation to finish.
+#[tauri::command]
+pub fn chat_append_turn(
+    state: State<'_, AppState>,
+    task_id: String,
+    seq: i64,
+    role: String,
+    text: String,
+    error_text: Option<String>,
+) -> Result<(), AppError> {
+    if role != "user" && role != "assistant" {
+        return Err(AppError::Validation("bad role".into()));
+    }
+    let conn = state.db.lock().expect("db lock");
+    conn.execute(
+        "INSERT INTO chat_turns (id, task_id, seq, role, text, error_text, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(task_id, seq) DO UPDATE SET
+           text = excluded.text, error_text = excluded.error_text",
+        rusqlite::params![
+            ulid::Ulid::new().to_string(),
+            task_id,
+            seq,
+            role,
+            text,
+            error_text,
+            now_ms()
+        ],
+    )?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn chat_turns(state: State<'_, AppState>, task_id: String) -> Result<Vec<ChatTurn>, AppError> {
+    let conn = state.db.lock().expect("db lock");
+    let mut stmt = conn.prepare(
+        "SELECT id, seq, role, text, error_text, created_at
+           FROM chat_turns WHERE task_id = ?1 ORDER BY seq",
+    )?;
+    let rows = stmt
+        .query_map([&task_id], |r| {
+            Ok(ChatTurn {
+                id: r.get(0)?,
+                seq: r.get(1)?,
+                role: r.get(2)?,
+                text: r.get(3)?,
+                error_text: r.get(4)?,
+                created_at: r.get(5)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSummary {
+    pub task_id: String,
+    pub title: String,
+    pub status: String,
+    pub turn_count: i64,
+    pub created_at: i64,
+}
+
+/// Past conversations in this workspace, newest first.
+#[tauri::command]
+pub fn chat_sessions(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<Vec<SessionSummary>, AppError> {
+    let conn = state.db.lock().expect("db lock");
+    let mut stmt = conn.prepare(
+        "SELECT t.id, t.prompt_text, t.status, t.created_at,
+                (SELECT count(*) FROM chat_turns c WHERE c.task_id = t.id)
+           FROM tasks t
+          WHERE t.workspace_id = ?1
+          ORDER BY t.created_at DESC
+          LIMIT 50",
+    )?;
+    let rows = stmt
+        .query_map([&workspace_id], |r| {
+            let prompt: String = r.get(1)?;
+            Ok(SessionSummary {
+                task_id: r.get(0)?,
+                title: prompt.chars().take(80).collect(),
+                status: r.get(2)?,
+                created_at: r.get(3)?,
+                turn_count: r.get(4)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Delete a conversation and its turns. `chat_turns` cascades from `tasks`.
+/// A running agent for that task is stopped first so the process doesn't
+/// outlive the record that points at it.
+#[tauri::command]
+pub async fn chat_delete_session(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<(), AppError> {
+    let _ = state.supervisor.stop(&task_id, true).await;
+    let conn = state.db.lock().expect("db lock");
+    conn.execute("DELETE FROM tasks WHERE id = ?1", [&task_id])?;
+    Ok(())
+}
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCommand {
+    pub name: String,
+    pub description: String,
+    /// "action" runs immediately over RPC; "skill" is inserted into the prompt
+    /// for the agent to interpret.
+    pub kind: String,
+}
+
+/// Actions Workbench can drive directly over the RPC protocol. These are
+/// verified command names from the agent's RPC surface, not guesses.
+fn builtin_commands() -> Vec<AgentCommand> {
+    let a = |name: &str, description: &str| AgentCommand {
+        name: name.into(),
+        description: description.into(),
+        kind: "action".into(),
+    };
+    vec![
+        a("compact", "Summarise the conversation so far to free up context"),
+        a("new", "Start a fresh conversation (ends the current agent session)"),
+        a("stop", "Abort what the agent is currently doing"),
+        a("thinking", "Set reasoning effort: off, minimal, low, medium, high, xhigh"),
+        a("model", "Switch the model for this conversation"),
+        a("stats", "Show token usage and cost for this session"),
+        a("export", "Export this conversation as HTML"),
+        a("fork", "Branch this conversation into a new one"),
+    ]
+}
+
+/// Slash commands available right now. Built-in actions always; the agent's own
+/// skills only when a session is live, since that is the only place the real
+/// list exists — hardcoding it would drift the moment a skill is added.
+#[tauri::command]
+pub async fn agent_commands(
+    state: State<'_, AppState>,
+    task_id: Option<String>,
+) -> Result<Vec<AgentCommand>, AppError> {
+    let mut out = builtin_commands();
+
+    if let Some(id) = task_id {
+        if let Some(running) = state.supervisor.get(&id) {
+            if let Ok(resp) = running
+                .dispatcher
+                .request(
+                    "get_commands",
+                    serde_json::json!({}),
+                    std::time::Duration::from_secs(10),
+                )
+                .await
+            {
+                if let Some(arr) = resp
+                    .data
+                    .as_ref()
+                    .and_then(|d| d.get("commands"))
+                    .and_then(|c| c.as_array())
+                {
+                    for c in arr {
+                        let (Some(name), desc) = (
+                            c.get("name").and_then(|n| n.as_str()),
+                            c.get("description").and_then(|d| d.as_str()).unwrap_or(""),
+                        ) else {
+                            continue;
+                        };
+                        out.push(AgentCommand {
+                            name: name.to_string(),
+                            description: desc.chars().take(120).collect(),
+                            kind: "skill".into(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Run one of the built-in actions against the live session.
+#[tauri::command]
+pub async fn agent_action(
+    state: State<'_, AppState>,
+    task_id: String,
+    action: String,
+    argument: Option<String>,
+) -> Result<Option<serde_json::Value>, AppError> {
+    let running = state
+        .supervisor
+        .get(&task_id)
+        .ok_or_else(|| AppError::NotFound("running agent".into()))?;
+    let timeout = std::time::Duration::from_secs(60);
+
+    let (command, params) = match action.as_str() {
+        "compact" => ("compact", serde_json::json!({})),
+        "stop" => ("abort", serde_json::json!({})),
+        "stats" => ("get_session_stats", serde_json::json!({})),
+        "export" => ("export_html", serde_json::json!({})),
+        "fork" => ("fork", serde_json::json!({})),
+        "thinking" => (
+            "set_thinking_level",
+            serde_json::json!({ "level": argument.unwrap_or_else(|| "medium".into()) }),
+        ),
+        other => {
+            return Err(AppError::Validation(format!("unknown action '{other}'")));
+        }
+    };
+
+    let resp = running
+        .dispatcher
+        .request(command, params, timeout)
+        .await
+        .map_err(|e| AppError::Internal(crate::secret::redact(&e.to_string())))?;
+    Ok(resp.data)
+}

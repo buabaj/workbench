@@ -177,6 +177,29 @@ export interface ModelInfo {
   pricePrompt: string | null;
 }
 
+export interface AgentCommand {
+  name: string;
+  description: string;
+  kind: "action" | "skill";
+}
+
+export interface ChatTurnRow {
+  id: string;
+  seq: number;
+  role: string;
+  text: string;
+  errorText: string | null;
+  createdAt: number;
+}
+
+export interface SessionSummary {
+  taskId: string;
+  title: string;
+  status: string;
+  turnCount: number;
+  createdAt: number;
+}
+
 export interface AgentModel {
   id: string;
   provider: string;
@@ -308,6 +331,14 @@ export const ipc = {
   agentSend: (taskId: string, command: "prompt" | "steer" | "follow_up", message: string) =>
     invoke<void>("agent_send", { taskId, command, message }),
   tasksRecent: (workspaceId: string) => invoke<TaskView[]>("tasks_recent", { workspaceId }),
+  chatAppendTurn: (taskId: string, seq: number, role: string, text: string, errorText: string | null) =>
+    invoke<void>("chat_append_turn", { taskId, seq, role, text, errorText }),
+  chatTurns: (taskId: string) => invoke<ChatTurnRow[]>("chat_turns", { taskId }),
+  chatSessions: (workspaceId: string) => invoke<SessionSummary[]>("chat_sessions", { workspaceId }),
+  chatDeleteSession: (taskId: string) => invoke<void>("chat_delete_session", { taskId }),
+  agentCommands: (taskId: string | null) => invoke<AgentCommand[]>("agent_commands", { taskId }),
+  agentAction: (taskId: string, action: string, argument: string | null) =>
+    invoke<unknown>("agent_action", { taskId, action, argument }),
 };
 
 export function onFsChanged(handler: (e: FsChanged) => void): Promise<UnlistenFn> {

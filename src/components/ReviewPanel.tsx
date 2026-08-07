@@ -5,7 +5,7 @@ import {
   type RestoreResult,
   type TaskDiff,
 } from "../ipc/client";
-import { useTasks } from "../store/tasks";
+import { useChat } from "../store/chat";
 import { useWorkspace } from "../store/workspace";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -120,8 +120,8 @@ function FileRow({
 }
 
 export function ReviewPanel() {
-  const taskId = useTasks((s) => s.taskId);
-  const status = useTasks((s) => s.status);
+  const taskId = useChat((s) => s.taskId);
+  const status = useChat((s) => s.status);
   const workspace = useWorkspace((s) => s.workspace);
   const loadChildren = useWorkspace((s) => s.loadChildren);
 
@@ -131,7 +131,9 @@ export function ReviewPanel() {
   const [done, setDone] = useState<"kept" | "restored" | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const terminal = status === "succeeded" || status === "failed" || status === "cancelled";
+  // "awaiting-input" is the settled state now: the agent finished a turn and
+  // is waiting, which is exactly when changes are worth reviewing.
+  const terminal = status === "awaiting-input" || status === "failed";
 
   useEffect(() => {
     if (!taskId || !terminal) return;

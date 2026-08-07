@@ -218,16 +218,23 @@ body {
   flex-shrink: 0;
 }
 .composer-meta { display: flex; align-items: center; gap: var(--s-2); font-size: var(--text-xs); }
-.composer-row { display: flex; gap: var(--s-2); align-items: center; }
+.composer-row { display: flex; gap: var(--s-2); align-items: flex-end; position: relative; }
 .composer-input {
   flex: 1;
+  min-width: 0;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-input);
   background: var(--canvas);
   padding: 10px var(--s-3);
   color: var(--ink);
   font: inherit;
+  line-height: 1.5;
   outline: none;
+  /* Grows with content (height set in App); wraps instead of scrolling
+     sideways, which is what made long prompts unreadable. */
+  resize: none;
+  overflow-y: auto;
+  max-height: 220px;
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 .composer-input::placeholder { color: var(--ink-faint); }
@@ -355,9 +362,9 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); background-clip: content-box; }
 
 
-/* ── markdown preview ─────────────────────────────────────────────────────
-   The serif lives here, in the RENDERED view, rather than in the source
-   editor: a .md file being edited is code and reads better as code. */
+/* ── markdown preview ────────────────────────────────────────────────────
+   Rendered .md files: the serif at full reading size. Everything structural
+   comes from the shared .md rules below. */
 .md-preview {
   max-width: var(--w-prose);
   margin: 0 auto;
@@ -366,53 +373,85 @@ body {
   font-variation-settings: var(--serif-settings);
   font-size: var(--prose);
   line-height: var(--lh-prose);
-  color: var(--ink);
   letter-spacing: var(--track-snug);
+}
+
+
+/* ── chat ─────────────────────────────────────────────────────────────────
+   The reply is the main content of this tab, so it uses the tab: one scroll
+   context, no fixed-height card with its own scrollbar. */
+.chat-col {
+  max-width: var(--w-chat);
+  margin: 0 auto;
+  padding: var(--s-8) var(--s-6) var(--s-12);
+}
+
+/* Turns are separated by space and weight, not bubbles — the same reason
+   Anthropic's own message list has no card around each reply. */
+.turn-user {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--s-3) var(--s-4);
+  margin-bottom: var(--s-5);
+  font-size: var(--text-md);
+  color: var(--ink-secondary);
+  white-space: pre-wrap;
   user-select: text;
 }
-.md-preview h1, .md-preview h2, .md-preview h3,
-.md-preview h4, .md-preview h5, .md-preview h6 {
+.turn-assistant { margin-bottom: var(--s-8); }
+.turn-assistant:last-of-type { margin-bottom: var(--s-4); }
+
+/* Shared markdown body. `.md-preview` keeps the larger reading size for files;
+   chat runs a touch tighter so replies don't feel like an essay. */
+.md { color: var(--ink); user-select: text; }
+.md-chat {
+  font-family: var(--serif);
+  font-variation-settings: var(--serif-settings);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  letter-spacing: var(--track-snug);
+}
+.md h1, .md h2, .md h3, .md h4 {
   font-weight: 600;
   line-height: var(--lh-snug);
-  margin: var(--s-8) 0 var(--s-3);
+  margin: var(--s-6) 0 var(--s-2);
   letter-spacing: var(--track-tight);
 }
-.md-preview h1 { font-size: var(--display); margin-top: 0; }
-.md-preview h2 { font-size: var(--display-sm); }
-.md-preview h3 { font-size: var(--text-lg); }
-.md-preview p, .md-preview ul, .md-preview ol, .md-preview blockquote {
-  margin-bottom: var(--s-4);
-}
-.md-preview ul, .md-preview ol { padding-left: var(--s-6); }
-.md-preview li { margin-bottom: var(--s-1); }
-.md-preview a { color: var(--sky); text-decoration: underline; text-underline-offset: 2px; }
-.md-preview strong { font-weight: 600; }
-.md-preview em { font-style: italic; }
-.md-preview blockquote {
+.md h1 { font-size: 1.4em; }
+.md h2 { font-size: 1.25em; }
+.md h3 { font-size: 1.1em; }
+.md > *:first-child { margin-top: 0; }
+.md p, .md ul, .md ol, .md blockquote, .md pre, .md table { margin-bottom: var(--s-4); }
+.md ul, .md ol { padding-left: var(--s-6); }
+.md li { margin-bottom: var(--s-1); }
+.md li::marker { color: var(--ink-faint); }
+.md a { color: var(--sky); text-decoration: underline; text-underline-offset: 2px; }
+.md strong { font-weight: 600; color: var(--ink); }
+.md em { font-style: italic; }
+.md blockquote {
   border-left: 2px solid var(--clay);
   padding-left: var(--s-4);
   color: var(--ink-muted);
-  font-style: italic;
 }
-.md-preview code {
+.md code {
   font-family: var(--mono);
-  font-size: 0.82em;
+  font-size: 0.85em;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-chip);
   padding: 1px 5px;
 }
-.md-preview pre {
+.md pre {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-card);
   padding: var(--s-3) var(--s-4);
   overflow-x: auto;
-  margin-bottom: var(--s-4);
 }
-.md-preview pre code { background: none; border: none; padding: 0; font-size: 13px; }
-.md-preview hr { border: none; border-top: 1px solid var(--border); margin: var(--s-8) 0; }
-.md-preview table { border-collapse: collapse; width: 100%; margin-bottom: var(--s-4); font-size: var(--text-md); }
-.md-preview th, .md-preview td { border: 1px solid var(--border); padding: 6px var(--s-3); text-align: left; }
-.md-preview th { background: var(--surface); font-weight: 600; }
-.md-preview img { max-width: 100%; border-radius: var(--r-card); }
+.md pre code { background: none; border: none; padding: 0; font-size: 12.5px; line-height: 1.6; }
+.md hr { border: none; border-top: 1px solid var(--border); margin: var(--s-6) 0; }
+.md table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+.md th, .md td { border: 1px solid var(--border); padding: 5px var(--s-3); text-align: left; }
+.md th { background: var(--surface); font-weight: 600; }
+.md img { max-width: 100%; border-radius: var(--r-card); }
