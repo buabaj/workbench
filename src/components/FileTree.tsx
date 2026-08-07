@@ -1,4 +1,5 @@
 import { useLayout } from "../store/layout";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useWorkspace } from "../store/workspace";
 import { FileIcon, FolderIcon } from "../icons/fileIcon";
 import type { TreeNode } from "../ipc/client";
@@ -37,7 +38,7 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
           onKeyDown={onKeyDown}
         >
           <span className="twisty" aria-hidden>
-            {expanded ? "▾" : "▸"}
+            {expanded ? <ChevronDown size={12} strokeWidth={2} /> : <ChevronRight size={12} strokeWidth={2} />}
           </span>
           <FolderIcon open={expanded} />
           <span className="label">{node.name}</span>

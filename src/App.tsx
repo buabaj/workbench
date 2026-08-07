@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AgentActivity } from "./components/AgentActivity";
-import { DotMatrix } from "./components/DotMatrix";
+import { ArrowUp, Moon, PanelLeft, PanelRight, Settings, SquareTerminal, Sun } from "lucide-react";
+import { AgentOrb, PHASE_LABEL, phaseFromTask } from "./components/AgentOrb";
 import { EditorPane } from "./components/EditorPane";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FileTree } from "./components/FileTree";
@@ -16,15 +17,6 @@ import { useTheme } from "./store/theme";
 import { useTasks } from "./store/tasks";
 import { useVoice } from "./store/voice";
 import { useWorkspace } from "./store/workspace";
-
-const STATUS_LABEL: Record<string, string> = {
-  idle: "READY",
-  starting: "STARTING",
-  running: "WORKING",
-  succeeded: "DONE",
-  failed: "FAILED",
-  cancelled: "STOPPED",
-};
 
 /** The centre when the chat tab is active: the conversation, at a reading
  *  measure, instead of a cramped box at the bottom of the window. */
@@ -87,7 +79,6 @@ export default function App() {
 
   const voicePhase = useVoice((s) => s.phase);
   const voiceElapsed = useVoice((s) => s.elapsedMs);
-  const voiceLevels = useVoice((s) => s.levels);
   const voiceError = useVoice((s) => s.error);
   const voiceCapability = useVoice((s) => s.capability);
   const toggleVoice = useVoice((s) => s.toggle);
@@ -190,10 +181,7 @@ export default function App() {
         </span>
         <span style={{ marginLeft: "auto" }} />
         <button className="btn icon" onClick={toggleRail} aria-label="Toggle sidebar" title="Toggle sidebar (⌘B)">
-          <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
-            <rect x="1.5" y="2.5" width="12" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
-            <path d="M5.5 2.5v10" stroke="currentColor" strokeWidth="1.2" />
-          </svg>
+          <PanelLeft size={15} strokeWidth={1.6} />
         </button>
         <button
           className="btn icon"
@@ -201,10 +189,7 @@ export default function App() {
           aria-label="Toggle inspector"
           title="Toggle inspector (⌥⌘B)"
         >
-          <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
-            <rect x="1.5" y="2.5" width="12" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
-            <path d="M9.5 2.5v10" stroke="currentColor" strokeWidth="1.2" />
-          </svg>
+          <PanelRight size={15} strokeWidth={1.6} />
         </button>
         <button
           className="btn icon"
@@ -213,10 +198,7 @@ export default function App() {
           title="Terminal — arriving in the next pass"
           disabled
         >
-          <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
-            <rect x="1.5" y="2.5" width="12" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
-            <path d="M1.5 8.5h12" stroke="currentColor" strokeWidth="1.2" />
-          </svg>
+          <SquareTerminal size={15} strokeWidth={1.6} />
         </button>
         <button
           className="btn icon"
@@ -224,35 +206,10 @@ export default function App() {
           aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`}
           title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`}
         >
-          {resolvedTheme === "dark" ? (
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
-              <circle cx="7.5" cy="7.5" r="3" fill="none" stroke="currentColor" strokeWidth="1.2" />
-              <path
-                d="M7.5 1v1.8M7.5 12.2V14M14 7.5h-1.8M2.8 7.5H1M12.1 2.9l-1.3 1.3M4.2 10.8l-1.3 1.3M12.1 12.1l-1.3-1.3M4.2 4.2L2.9 2.9"
-                stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"
-              />
-            </svg>
-          ) : (
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
-              <path
-                d="M12.5 9.3A5.5 5.5 0 0 1 5.7 2.5a5.5 5.5 0 1 0 6.8 6.8Z"
-                fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"
-              />
-            </svg>
-          )}
+          {resolvedTheme === "dark" ? <Sun size={15} strokeWidth={1.6} /> : <Moon size={15} strokeWidth={1.6} />}
         </button>
         <button className="btn icon" onClick={openSettingsTab} aria-label="Settings" title="Settings (⌘,)">
-          {/* A toothed gear, so it can't be mistaken for the sun above it. */}
-          <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>
-            <path
-              d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
-              fill="none" stroke="currentColor" strokeWidth="1.7"
-            />
-            <path
-              d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.5h-4l-.3 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.3 2.5h4l.3-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6Z"
-              fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
-            />
-          </svg>
+          <Settings size={15} strokeWidth={1.6} />
         </button>
       </header>
 
@@ -349,7 +306,6 @@ export default function App() {
             <VoiceButton
               phase={voicePhase}
               elapsedMs={voiceElapsed}
-              levels={voiceLevels}
               configured={Boolean(voiceCapability?.configured)}
               onToggle={() => void toggleVoice(insertTranscript)}
               onCancel={() => void cancelVoice()}
@@ -361,18 +317,7 @@ export default function App() {
               aria-label={busy ? "Running" : "Send"}
               title={busy ? "Running…" : "Send (↵)"}
             >
-              {busy ? (
-                <span className="matrix animate" style={{ gridTemplateColumns: "repeat(3, 3px)" }}>
-                  {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                    <i key={i} className={i % 3 === 1 ? "a" : ""} />
-                  ))}
-                </span>
-              ) : (
-                <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
-                  <path d="M7.5 12V3M4 6.5L7.5 3l3.5 3.5" fill="none" stroke="currentColor"
-                        strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
+              {busy ? <AgentOrb phase="thinking" /> : <ArrowUp size={16} strokeWidth={2} />}
             </button>
           </div>
         </footer>
@@ -385,10 +330,10 @@ export default function App() {
               <h3 id="p-agent">Agent</h3>
               <div className="card">
                 <div className="state-row">
-                  <DotMatrix state={matrix} />
+                  <AgentOrb phase={phaseFromTask(taskStatus, matrix)} />
                   <div style={{ flex: 1 }}>
                     <div className="state-label" role="status" aria-live="polite">
-                      {STATUS_LABEL[taskStatus] ?? taskStatus}
+                      {PHASE_LABEL[phaseFromTask(taskStatus, matrix)]}
                     </div>
                     <div className="state-sub">
                       {resolvedProfile

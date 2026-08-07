@@ -1,14 +1,6 @@
-import { DotMatrix } from "./DotMatrix";
+import { Check, X } from "lucide-react";
+import { AgentOrb, PHASE_LABEL, phaseFromTask } from "./AgentOrb";
 import { useTasks } from "../store/tasks";
-
-const LABELS: Record<string, string> = {
-  idle: "AWAITING INPUT",
-  starting: "STARTING",
-  running: "THINKING",
-  succeeded: "COMPLETE",
-  failed: "FAILED",
-  cancelled: "STOPPED",
-};
 
 export function AgentActivity() {
   const status = useTasks((s) => s.status);
@@ -19,8 +11,7 @@ export function AgentActivity() {
   const resolved = useTasks((s) => s.resolvedProfile);
   const stopTask = useTasks((s) => s.stopTask);
 
-  const label =
-    matrix === "running-tools" ? "RUNNING TOOLS" : (LABELS[status] ?? status.toUpperCase());
+  const label = PHASE_LABEL[phaseFromTask(status, matrix)];
 
   return (
     <div
@@ -32,7 +23,7 @@ export function AgentActivity() {
       }}
     >
       <div className="state-row" style={{ marginBottom: toolFeed.length || text ? 12 : 0 }}>
-        <DotMatrix state={matrix} />
+        <AgentOrb phase={phaseFromTask(status, matrix)} />
         <div style={{ flex: 1 }}>
           {/* Agent state changes without user action, so it is announced.
               The label is always present — motion and colour never carry
@@ -84,8 +75,8 @@ export function AgentActivity() {
                     : "var(--ink-faint)",
             }}
           >
-            <span aria-hidden>
-              {row.status === "running" ? "…" : row.status === "ok" ? "✓" : "✕"}
+            <span aria-hidden style={{ display: "inline-flex" }}>
+              {row.status === "running" ? "…" : row.status === "ok" ? <Check size={12} strokeWidth={2.2} /> : <X size={12} strokeWidth={2.2} />}
             </span>
             <span className="sr-only">{row.status}</span>
           </span>

@@ -1,6 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
-import type { MatrixState } from "../components/DotMatrix";
 import { describeMessage, extractDelta } from "../chat/normalize";
 import {
   ipc,
@@ -9,6 +8,14 @@ import {
   type TaskStreamEnvelope,
   type TaskView,
 } from "../ipc/client";
+
+/** Internal detail phase; the UI maps this onto an orb via phaseFromTask. */
+export type MatrixState =
+  | "awaiting-input"
+  | "thinking"
+  | "running-tools"
+  | "complete"
+  | "failed";
 
 export interface ToolFeedRow {
   time: string;

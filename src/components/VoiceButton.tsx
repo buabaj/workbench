@@ -1,4 +1,5 @@
-import { DotWaveform } from "./DotMatrix";
+import { Mic, Square, X } from "lucide-react";
+import { AgentOrb } from "./AgentOrb";
 import type { VoicePhase } from "../store/voice";
 
 function formatElapsed(ms: number): string {
@@ -7,21 +8,18 @@ function formatElapsed(ms: number): string {
 }
 
 /**
- * Recording reads as the app's own dot language — a live level histogram —
- * rather than a red blob. The elapsed time sits beside it in tabular figures
- * so the row doesn't jitter as digits change.
+ * Recording shows the orb in its `listening` state with the elapsed time in
+ * tabular figures, so the row doesn't jitter as digits change.
  */
 export function VoiceButton({
   phase,
   elapsedMs,
-  levels,
   configured,
   onToggle,
   onCancel,
 }: {
   phase: VoicePhase;
   elapsedMs: number;
-  levels: number[];
   configured: boolean;
   onToggle: () => void;
   onCancel: () => void;
@@ -34,17 +32,17 @@ export function VoiceButton({
           alignItems: "center",
           gap: "var(--s-2)",
           padding: "5px 8px 5px 10px",
-          border: "1px solid var(--clay)",
+          border: "1px solid var(--border-strong)",
           borderRadius: "var(--r-pill)",
-          background: "var(--clay-wash)",
+          background: "var(--surface)",
         }}
       >
-        <DotWaveform levels={levels} />
+        <AgentOrb phase="listening" />
         <span
           style={{
             fontSize: "var(--text-xs)",
             fontVariantNumeric: "tabular-nums",
-            color: "var(--clay-text)",
+            color: "var(--ink-secondary)",
             minWidth: 30,
           }}
         >
@@ -57,9 +55,7 @@ export function VoiceButton({
           title="Stop and transcribe (⌘⇧V)"
           style={{ padding: 4 }}
         >
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
-            <rect x="1.5" y="1.5" width="9" height="9" rx="2.5" fill="currentColor" />
-          </svg>
+          <Square size={12} fill="currentColor" strokeWidth={0} />
         </button>
         <button
           className="btn icon"
@@ -68,9 +64,7 @@ export function VoiceButton({
           title="Discard"
           style={{ padding: 4 }}
         >
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
-            <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
+          <X size={12} strokeWidth={2} />
         </button>
       </div>
     );
@@ -78,18 +72,8 @@ export function VoiceButton({
 
   if (phase === "transcribing") {
     return (
-      <div
-        className="btn icon"
-        aria-live="polite"
-        aria-label="Transcribing"
-        title="Transcribing…"
-        style={{ opacity: 0.8 }}
-      >
-        <span className="matrix animate" style={{ gridTemplateColumns: "repeat(3, 3px)" }}>
-          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-            <i key={i} className={i % 3 === 1 ? "a" : ""} />
-          ))}
-        </span>
+      <div className="btn icon" aria-live="polite" aria-label="Transcribing" title="Transcribing…">
+        <AgentOrb phase="transcribing" />
       </div>
     );
   }
@@ -102,16 +86,7 @@ export function VoiceButton({
       aria-label={configured ? "Record and transcribe" : "Voice transcription not configured"}
       title={configured ? "Record and transcribe (⌘⇧V)" : "Add an OpenRouter key in Settings"}
     >
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-        <rect x="6" y="2" width="4" height="7" rx="2" fill="none" stroke="currentColor" strokeWidth="1.3" />
-        <path
-          d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.3"
-          strokeLinecap="round"
-        />
-      </svg>
+      <Mic size={16} strokeWidth={1.6} />
     </button>
   );
 }

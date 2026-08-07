@@ -1,4 +1,5 @@
-import { ButterflyMark } from "./DotMatrix";
+import { X } from "lucide-react";
+import { ButterflyMark } from "./ButterflyMark";
 import { FileIcon } from "../icons/fileIcon";
 import { useLayout, type Tab } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
@@ -71,14 +72,14 @@ function TabButton({ tab }: { tab: Tab }) {
             background: "none",
             border: "none",
             font: "inherit",
-            fontSize: 11,
             color: "var(--ink-faint)",
             padding: 0,
             marginLeft: 2,
             cursor: "default",
+            display: "inline-flex",
           }}
         >
-          ✕
+          <X size={11} strokeWidth={2} />
         </button>
       )}
     </div>

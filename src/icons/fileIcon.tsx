@@ -1,3 +1,5 @@
+import { File, FileCode, FileCog, FileImage, FileText, Folder, FolderOpen } from "lucide-react";
+
 /**
  * File-type icons with colour that stays inside the palette.
  *
@@ -62,44 +64,36 @@ function colorFor(name: string): IconColor {
   return BY_EXT[ext] ?? "muted";
 }
 
-/** A page glyph with a folded corner — same silhouette for every file, colour
- * carrying the type. Shape stays constant so scanning the tree is about names. */
+/**
+ * Lucide glyphs, tinted from the palette map above. Lucide ships
+ * `stroke="currentColor"`, so colour comes from the wrapper and never leaves
+ * the design system — brand-coloured language logos would read as decorative
+ * saturation against the warm surfaces.
+ */
 export function FileIcon({ name }: { name: string }) {
-  const fill = COLOR_VAR[colorFor(name)];
+  const color = COLOR_VAR[colorFor(name)];
+  const lower = name.toLowerCase();
+  const Glyph = lower.endsWith(".md") || lower.endsWith(".markdown")
+    ? FileText
+    : /\.(png|jpe?g|gif|webp|svg|ico)$/.test(lower)
+      ? FileImage
+      : /\.(json|toml|ya?ml|xml|lock|env)$/.test(lower) || lower === ".gitignore"
+        ? FileCog
+        : /\.(rs|ts|tsx|js|jsx|py|rb|go|swift|c|h|cpp|hpp|sh|zsh|bash|lua|php|sql|css|html)$/.test(lower)
+          ? FileCode
+          : File;
   return (
-    <svg className="file-icon" viewBox="0 0 16 16" aria-hidden focusable="false">
-      <path
-        d="M4 1.5h5L13 5.5V14a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 3 14V2a.5.5 0 0 1 .5-.5Z"
-        fill={fill}
-        fillOpacity="0.18"
-      />
-      <path
-        d="M4 1.5h5L13 5.5V14a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 3 14V2a.5.5 0 0 1 .5-.5Z"
-        fill="none"
-        stroke={fill}
-        strokeWidth="1.1"
-        strokeLinejoin="round"
-      />
-      <path d="M9 1.5V5a.5.5 0 0 0 .5.5H13" fill="none" stroke={fill} strokeWidth="1.1" strokeLinejoin="round" />
-    </svg>
+    <span className="file-icon" style={{ color }}>
+      <Glyph size={14} strokeWidth={1.6} aria-hidden />
+    </span>
   );
 }
 
 export function FolderIcon({ open }: { open: boolean }) {
+  const Glyph = open ? FolderOpen : Folder;
   return (
-    <svg className="file-icon" viewBox="0 0 16 16" aria-hidden focusable="false">
-      <path
-        d={
-          open
-            ? "M2 4.5A.5.5 0 0 1 2.5 4h3.2l1.3 1.5h6.5a.5.5 0 0 1 .48.63l-1.6 5.5a.5.5 0 0 1-.48.37H2.5a.5.5 0 0 1-.5-.5v-7Z"
-            : "M2 3.5a.5.5 0 0 1 .5-.5h3.2l1.3 1.5h6.5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-8.5Z"
-        }
-        fill="var(--clay)"
-        fillOpacity="0.16"
-        stroke="var(--clay)"
-        strokeWidth="1.1"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <span className="file-icon" style={{ color: "var(--clay)" }}>
+      <Glyph size={14} strokeWidth={1.6} aria-hidden />
+    </span>
   );
 }

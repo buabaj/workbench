@@ -1,3 +1,4 @@
+import { AlertCircle, CheckCircle2, XCircle } from "lucide-react";
 import { useWorkspace } from "../store/workspace";
 import type { PreflightCheck } from "../ipc/client";
 
@@ -26,8 +27,14 @@ function CheckRow({ check }: { check: PreflightCheck }) {
         textAlign: "left",
       }}
     >
-      <span style={{ color: levelColor(check.level), fontSize: 10 }}>
-        {check.level === "ok" ? "●" : check.level === "warn" ? "◐" : "○"}
+      <span style={{ color: levelColor(check.level), display: "inline-flex", marginTop: 1 }}>
+        {check.level === "ok" ? (
+          <CheckCircle2 size={13} strokeWidth={1.8} />
+        ) : check.level === "warn" ? (
+          <AlertCircle size={13} strokeWidth={1.8} />
+        ) : (
+          <XCircle size={13} strokeWidth={1.8} />
+        )}
       </span>
       <div style={{ flex: 1 }}>
         <div style={{ color: "var(--ink)" }}>{check.title}</div>
