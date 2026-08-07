@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { ipc } from "../ipc/client";
+import { findQuoteStart, type Annotation } from "./annotations";
 import { useComposer } from "../store/composer";
 import { useLayout } from "../store/layout";
 
@@ -185,11 +186,13 @@ function Page({
   pageNumber,
   scale,
   onSelect,
+  annotations,
 }: {
   doc: pdfjs.PDFDocumentProxy;
   pageNumber: number;
   scale: number;
   onSelect: (sel: PdfSelection | null) => void;
+  annotations: Annotation[];
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -201,6 +204,8 @@ function Page({
   const [visible, setVisible] = useState(pageNumber <= EAGER_PAGES);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [renderErr, setRenderErr] = useState<string | null>(null);
+  const [items, setItems] = useState<unknown[]>([]);
+  const [openMark, setOpenMark] = useState<number | null>(null);
 
   // Reserve the page's space before it renders, so the scrollbar does not
   // lurch as pages fill in behind you.
@@ -298,9 +303,10 @@ function Page({
       try {
         const textHost = textRef.current;
         if (textHost) {
-          const items = await readTextItems(page);
+          const textItems = await readTextItems(page);
           if (cancelled) return;
-          buildTextLayer(textHost, items, viewport);
+          buildTextLayer(textHost, textItems, viewport);
+          setItems(textItems);
           trace(`p${pageNumber} text layer: ${textHost.childElementCount} spans`);
         }
       } catch (e) {
@@ -337,6 +343,36 @@ function Page({
       }}
     >
       <canvas ref={canvasRef} style={{ display: "block", position: "relative", zIndex: 1 }} />
+      {annotations.map((a, i) => {
+        const at = findQuoteStart(items as Array<{ str?: string }>, a.quote);
+        const span = at >= 0 ? (textRef.current?.children[at] as HTMLElement | undefined) : undefined;
+        if (!span) return null;
+        return (
+          <div
+            key={i}
+            style={{ position: "absolute", left: 2, top: span.offsetTop - 2, zIndex: 4 }}
+          >
+            <button
+              className="pdf-mark"
+              aria-label={`Annotation: ${a.comment.slice(0, 60)}`}
+              aria-expanded={openMark === i}
+              title={a.comment}
+              onClick={() => setOpenMark(openMark === i ? null : i)}
+            >
+              <PenLine size={9} strokeWidth={2.2} />
+            </button>
+            {openMark === i && (
+              <div className="pdf-mark-note" role="note">
+                <div style={{ color: "var(--ink-faint)", marginBottom: 4, fontStyle: "italic" }}>
+                  “{a.quote.slice(0, 120)}
+                  {a.quote.length > 120 ? "…" : ""}”
+                </div>
+                {a.comment}
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       {renderErr && (
         <div
@@ -382,11 +418,14 @@ export function PdfView({
   workspaceId,
   relPath,
   onAnnotate,
+  annotations = [],
 }: {
   workspaceId: string;
   relPath: string;
   /** Offered when the host can store a note against the document. */
   onAnnotate?: (sel: PdfSelection) => void;
+  /** Shown as markers beside the passages they were made on. */
+  annotations?: Annotation[];
 }) {
   const [doc, setDoc] = useState<pdfjs.PDFDocumentProxy | null>(null);
   const [scale, setScale] = useState(1.25);
@@ -509,7 +548,14 @@ export function PdfView({
           </div>
         ) : (
           Array.from({ length: doc.numPages }, (_, i) => (
-            <Page key={i + 1} doc={doc} pageNumber={i + 1} scale={scale} onSelect={setSel} />
+            <Page
+              key={i + 1}
+              doc={doc}
+              pageNumber={i + 1}
+              scale={scale}
+              onSelect={setSel}
+              annotations={annotations.filter((a) => a.page === i + 1)}
+            />
           ))
         )}
       </div>

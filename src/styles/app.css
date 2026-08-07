@@ -626,3 +626,40 @@ body {
   background: color-mix(in srgb, var(--clay) 45%, transparent);
   color: transparent;
 }
+
+/* An annotation's marker, in the page's left margin. Deliberately small and
+   in the margin rather than over the text: it points at a passage without
+   covering the words it points at. */
+.pdf-mark {
+  appearance: none;
+  border: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--clay);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  box-shadow: 0 1px 3px #0003;
+}
+.pdf-mark:hover { background: var(--clay-hover); }
+.pdf-mark-note {
+  position: absolute;
+  left: 20px;
+  top: 0;
+  width: 260px;
+  padding: 8px 10px;
+  background: var(--canvas);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--clay);
+  border-radius: var(--r-control);
+  box-shadow: var(--lift-strong);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  user-select: text;
+  z-index: 5;
+}

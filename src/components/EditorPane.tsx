@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { frontmatterField } from "../research/frontmatter";
-import { appendAnnotation } from "../research/annotations";
+import { appendAnnotation, parseAnnotations, type Annotation } from "../research/annotations";
 import { PdfView, type PdfSelection } from "../research/PdfView";
 import { SelectionBubble } from "../editor/SelectionBubble";
 import { useEditorSession } from "../editor/useEditorSession";
@@ -78,7 +78,7 @@ function AnnotationComposer({
   workspaceId: string;
   notePath: string;
   selection: PdfSelection;
-  onDone: () => void;
+  onDone: (saved: boolean) => void;
 }) {
   const [comment, setComment] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -87,7 +87,7 @@ function AnnotationComposer({
   useEffect(() => ref.current?.focus(), []);
 
   const save = async () => {
-    if (!comment.trim()) return onDone();
+    if (!comment.trim()) return onDone(false);
     try {
       const current = await ipc.fileRead(workspaceId, notePath);
       const next = appendAnnotation(current.text, {
@@ -96,7 +96,7 @@ function AnnotationComposer({
         comment: comment.trim(),
       });
       await ipc.fileWrite(workspaceId, notePath, next, current.contentHash);
-      onDone();
+      onDone(true);
     } catch (e) {
       setErr(formatError(e));
     }
@@ -123,6 +123,11 @@ function AnnotationComposer({
         p.{selection.page} — “{selection.text.replace(/\s+/g, " ").slice(0, 200)}
         {selection.text.length > 200 ? "…" : ""}”
       </div>
+      {/* Where it goes, said plainly. An annotation that vanishes into an
+          unnamed place is one you will not trust enough to make again. */}
+      <div style={{ fontSize: "var(--text-xs)", color: "var(--ink-faint)", marginBottom: 6 }}>
+        Saved into {notePath} under “Annotations”, and marked on the page.
+      </div>
       <textarea
         ref={ref}
         className="field"
@@ -139,7 +144,7 @@ function AnnotationComposer({
             void save();
           } else if (e.key === "Escape") {
             e.preventDefault();
-            onDone();
+            onDone(false);
           }
         }}
       />
@@ -152,7 +157,11 @@ function AnnotationComposer({
         <button className="btn primary" style={{ fontSize: "var(--text-xs)" }} onClick={() => void save()}>
           Save note ⌘↵
         </button>
-        <button className="btn" style={{ fontSize: "var(--text-xs)" }} onClick={onDone}>
+        <button
+          className="btn"
+          style={{ fontSize: "var(--text-xs)" }}
+          onClick={() => onDone(false)}
+        >
           Cancel
         </button>
       </div>
@@ -176,19 +185,37 @@ export function EditorPane() {
   // disk with nothing anywhere that opens it — the note was the only way in.
   const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [showPdf, setShowPdf] = useState(false);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  // Bumped after saving, so a new annotation gets its marker immediately
+  // rather than on the next time the file is opened.
+  const [noteVersion, setNoteVersion] = useState(0);
+
   useEffect(() => {
-    setShowPdf(false);
-    setPdfPath(null);
+    if (noteVersion === 0) {
+      setShowPdf(false);
+      setPdfPath(null);
+    }
+    setAnnotations([]);
     if (!workspace || !active || !/\.(md|markdown)$/i.test(active)) return;
     let live = true;
     void ipc
       .fileRead(workspace.id, active)
-      .then((c) => live && setPdfPath(frontmatterField(c.text, "pdf")))
+      .then((c) => {
+        if (!live) return;
+        setPdfPath(frontmatterField(c.text, "pdf"));
+        setAnnotations(parseAnnotations(c.text));
+      })
       .catch(() => {});
     return () => {
       live = false;
     };
-  }, [workspace?.id, active]);
+  }, [workspace?.id, active, noteVersion]);
+
+  // Opening a different file starts clean; a re-read of the same one does not.
+  useEffect(() => {
+    setNoteVersion(0);
+    setShowPdf(false);
+  }, [active]);
 
   // An annotation is captured against the PDF but written into the NOTE, so
   // the comment is collected here, where the note's path is known.
@@ -209,7 +236,10 @@ export function EditorPane() {
           workspaceId={workspace.id}
           notePath={active}
           selection={pendingAnnotation}
-          onDone={() => setPendingAnnotation(null)}
+          onDone={(saved) => {
+            setPendingAnnotation(null);
+            if (saved) setNoteVersion((v) => v + 1);
+          }}
         />
       )}
       {markdown && (
@@ -276,6 +306,7 @@ export function EditorPane() {
           workspaceId={workspace.id}
           relPath={pdfPath}
           onAnnotate={(sel) => setPendingAnnotation(sel)}
+          annotations={annotations}
         />
       ) : markdown && preview ? (
         <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>

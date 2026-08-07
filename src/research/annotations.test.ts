@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { appendAnnotation, parseAnnotations, renderAnnotation } from "./annotations";
+import {
+  appendAnnotation,
+  findQuoteStart,
+  parseAnnotations,
+  renderAnnotation,
+} from "./annotations";
 
 const NOTE = `---
 title: A Paper
@@ -69,5 +74,44 @@ describe("parseAnnotations", () => {
     const block = renderAnnotation({ page: 2, quote: "one\ntwo\n\nthree", comment: "c" });
     expect(block).toContain('### p.2 — "one two three"');
     expect(parseAnnotations(`\n## Annotations\n\n${block}`)[0].quote).toBe("one two three");
+  });
+});
+
+
+describe("findQuoteStart", () => {
+  // How a PDF actually reports a line: runs split at arbitrary points.
+  const items = [
+    { str: "We propose " },
+    { str: "a new archi" },
+    { str: "tecture for " },
+    { str: "sequence modelling." },
+  ];
+
+  it("finds a quote that starts inside an item", () => {
+    expect(findQuoteStart(items, "a new architecture")).toBe(1);
+  });
+
+  it("finds one that spans several items", () => {
+    expect(findQuoteStart(items, "architecture for sequence")).toBe(1);
+  });
+
+  /** The captured quote's whitespace never matches the PDF's runs. */
+  it("ignores whitespace differences on both sides", () => {
+    expect(findQuoteStart(items, "  a   new\narchitecture ")).toBe(1);
+  });
+
+  it("matches case-insensitively", () => {
+    expect(findQuoteStart(items, "SEQUENCE MODELLING")).toBe(3);
+  });
+
+  it("matches on the opening of a long quote", () => {
+    const long = "We propose a new architecture for sequence modelling " + "and more ".repeat(20);
+    expect(findQuoteStart(items, long)).toBe(0);
+  });
+
+  it("returns -1 when the passage is not on this page", () => {
+    expect(findQuoteStart(items, "something else entirely")).toBe(-1);
+    expect(findQuoteStart(items, "")).toBe(-1);
+    expect(findQuoteStart([], "anything")).toBe(-1);
   });
 });

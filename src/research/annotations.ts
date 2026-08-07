@@ -83,3 +83,50 @@ export function appendAnnotation(note: string, a: Annotation): string {
   const body = rest.slice(0, nextHeading).replace(/\s*$/, "");
   return `${note.slice(0, afterHeading)}${body}\n\n${block}\n${rest.slice(nextHeading)}`;
 }
+
+
+/**
+ * Where an annotation's quote begins, as an index into a page's text items.
+ *
+ * Matched by TEXT rather than by stored coordinates. A rectangle recorded at
+ * one zoom level is wrong at every other, and wrong again if the document is
+ * re-rendered at a different scale; the words do not move. It also means an
+ * annotation made today still finds its passage after the reader changes.
+ *
+ * Whitespace is normalised on both sides because a PDF splits a sentence into
+ * runs at arbitrary points — often mid-word — so the quote as captured rarely
+ * matches any single item.
+ */
+export function findQuoteStart(items: Array<{ str?: string }>, quote: string): number {
+  const needle = quote.replace(/\s+/g, "").toLowerCase();
+  if (!needle) return -1;
+
+  let joined = "";
+  // Where each item's text begins within `joined`, so a hit maps back.
+  const starts: number[] = [];
+  for (const item of items) {
+    starts.push(joined.length);
+    joined += (item.str ?? "").replace(/\s+/g, "").toLowerCase();
+  }
+
+  // Try progressively shorter openings. A selection that runs past the bottom
+  // of the page — which is exactly when you drag across a page break — has a
+  // start on THIS page and a tail that is not here at all, so matching on the
+  // whole opening fails while matching on less of it succeeds. Stops well
+  // before a fragment short enough to land on the wrong sentence.
+  let at = -1;
+  for (const len of [60, 40, 24, 12]) {
+    if (needle.length < len && len !== 12) continue;
+    at = joined.indexOf(needle.slice(0, Math.min(len, needle.length)));
+    if (at !== -1) break;
+  }
+  if (at === -1) return -1;
+
+  // The last item that begins at or before the hit is the one it starts in.
+  let idx = 0;
+  for (let i = 0; i < starts.length; i++) {
+    if (starts[i] <= at) idx = i;
+    else break;
+  }
+  return idx;
+}

@@ -36,6 +36,7 @@ import { BacklinksPanel } from "./research/BacklinksPanel";
 import { LibraryPanel } from "./research/LibraryPanel";
 import { NotesPanel } from "./research/NotesPanel";
 import { SearchPanel } from "./components/SearchPanel";
+import { WelcomeView } from "./components/WelcomeView";
 import { SlashMenu } from "./components/SlashMenu";
 import { TerminalDock } from "./terminal/TerminalDock";
 import { TabStrip } from "./components/TabStrip";
@@ -545,7 +546,12 @@ export default function App() {
         <TabStrip onNewConversation={() => void newConversation()} />
         <main className="canvas" aria-label="Main">
           <ErrorBoundary>
-            {activeTab?.kind === "file" ? (
+            {/* Nothing can be built until a folder is chosen, so the chat's
+                "what are we building?" has nowhere to send an answer. Say what
+                this is instead, and offer the one action that applies. */}
+            {!workspace ? (
+              <WelcomeView />
+            ) : activeTab?.kind === "file" ? (
               <EditorPane />
             ) : activeTab?.kind === "settings" ? (
               <SettingsView />
