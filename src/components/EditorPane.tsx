@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { SelectionBubble } from "../editor/SelectionBubble";
 import { useEditorSession } from "../editor/useEditorSession";
 import { useLayout } from "../store/layout";
 import { MarkdownPreview } from "./MarkdownPreview";
@@ -128,9 +130,17 @@ function Editor({ workspaceId, relPath }: { workspaceId: string; relPath: string
   const { mount, viewRef } = useEditorSession(workspaceId, relPath);
   // Cmd+S is bound inside the editor; this button is the visible affordance.
   const phase = useWorkspace((s) => s.buffers[relPath]?.phase);
+  const hostRef = useRef<HTMLDivElement | null>(null);
   return (
     <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
-      <div ref={mount} style={{ height: "100%", overflow: "hidden" }} />
+      <div
+        ref={(node) => {
+          hostRef.current = node;
+          mount(node);
+        }}
+        style={{ height: "100%", overflow: "hidden" }}
+      />
+      <SelectionBubble viewRef={viewRef} relPath={relPath} hostRef={hostRef} />
       {phase === "dirty" && (
         <button
           className="btn"

@@ -40,6 +40,7 @@ import { findTemplate } from "./commands/prompts";
 import { useLayout } from "./store/layout";
 import { useTheme } from "./store/theme";
 import { useChat } from "./store/chat";
+import { useComposer } from "./store/composer";
 import { useVoice } from "./store/voice";
 import { useWorkspace } from "./store/workspace";
 
@@ -88,7 +89,11 @@ export default function App() {
   const cancelVoice = useVoice((s) => s.cancel);
   const refreshVoiceCapability = useVoice((s) => s.refreshCapability);
 
-  const [prompt, setPrompt] = useState("");
+  // Lives in a store, not local state: the editor's selection actions and the
+  // voice transcript both put text here, and neither is a child of the composer.
+  const prompt = useComposer((s) => s.text);
+  const setPrompt = useComposer((s) => s.setText);
+  const composerFocusTick = useComposer((s) => s.focusTick);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
@@ -148,10 +153,19 @@ export default function App() {
 
   // Transcript arrives as ordinary editable text. There is deliberately no
   // path from here to submitting the task.
-  const insertTranscript = useCallback(
-    (text: string) => setPrompt((p) => (p ? `${p.trimEnd()} ${text}` : text)),
-    [],
-  );
+  const insertTranscript = useCallback((text: string) => {
+    const current = useComposer.getState().text;
+    useComposer.getState().setText(current ? `${current.trimEnd()} ${text}` : text);
+  }, []);
+
+  // Something asked for the caret — the selection bubble, or a voice insert.
+  useEffect(() => {
+    if (composerFocusTick === 0) return;
+    const el = promptRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [composerFocusTick]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

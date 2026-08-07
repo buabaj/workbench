@@ -59,14 +59,36 @@ describe("applyMention", () => {
 describe("extractMentions", () => {
   it("finds several, in order, without duplicates", () => {
     expect(extractMentions("compare @a/one.rs with @b/two.rs and @a/one.rs")).toEqual([
-      "a/one.rs",
-      "b/two.rs",
+      { path: "a/one.rs" },
+      { path: "b/two.rs" },
     ]);
   });
 
   it("trims trailing punctuation but keeps the extension", () => {
-    expect(extractMentions("read @design/DESIGN.md, then stop")).toEqual(["design/DESIGN.md"]);
-    expect(extractMentions("(see @src/main.rs)")).toEqual(["src/main.rs"]);
+    expect(extractMentions("read @design/DESIGN.md, then stop")).toEqual([
+      { path: "design/DESIGN.md" },
+    ]);
+    expect(extractMentions("(see @src/main.rs)")).toEqual([{ path: "src/main.rs" }]);
+  });
+
+  /** The shape the editor's selection actions insert. */
+  it("reads a line range off the reference", () => {
+    expect(extractMentions("look at @src/main.rs:12-20")).toEqual([
+      { path: "src/main.rs", lines: { from: 12, to: 20 } },
+    ]);
+  });
+
+  it("keeps a range and a plain reference to the same file apart", () => {
+    expect(extractMentions("@a.rs and @a.rs:1-2")).toEqual([
+      { path: "a.rs" },
+      { path: "a.rs", lines: { from: 1, to: 2 } },
+    ]);
+  });
+
+  it("still trims punctuation after a range", () => {
+    expect(extractMentions("see @a.rs:3-4.")).toEqual([
+      { path: "a.rs", lines: { from: 3, to: 4 } },
+    ]);
   });
 
   it("ignores an email address", () => {
@@ -96,6 +118,12 @@ describe("referenceFooter", () => {
   it("does not produce a double slash", () => {
     expect(referenceFooter("@a.rs", "/w/")).toContain("/w/a.rs");
     expect(referenceFooter("@/a.rs", "/w")).toContain("/w/a.rs");
+  });
+
+  it("names the line range when one was selected", () => {
+    expect(referenceFooter("@src/main.rs:12-20", "/w")).toContain(
+      "- /w/src/main.rs (lines 12-20)",
+    );
   });
 
   it("is empty when nothing was referenced", () => {
