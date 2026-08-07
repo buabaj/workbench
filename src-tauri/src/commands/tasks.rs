@@ -62,8 +62,18 @@ pub async fn agent_start_task(
         .join("agent-sessions");
     std::fs::create_dir_all(&session_dir)?;
 
+    let cwd: String = {
+        let conn = state.db.lock().expect("db lock");
+        conn.query_row(
+            "SELECT root_real FROM workspaces WHERE id = ?1",
+            [&workspace_id],
+            |r| r.get(0),
+        )?
+    };
+
     let (plan, task_row) = {
         let ws_id = workspace_id.clone();
+        let cwd_for_plan = cwd.clone();
         let t_id = task_id.clone();
         let prompt_clone = prompt.clone();
         let session_dir = session_dir.clone();
@@ -88,6 +98,7 @@ pub async fn agent_start_task(
                 program: resolved.program.clone(),
                 path_env: resolved.path_env.clone(),
                 session_dir: &session_dir,
+                workspace_root: std::path::Path::new(&cwd_for_plan),
             };
             let plan = build_spawn_plan(&conn, keychain.as_ref(), &profile.id, &t_id, &ctx)
                 .map_err(|e| AppError::Internal(crate::secret::redact(&e.to_string())))?;
@@ -118,16 +129,6 @@ pub async fn agent_start_task(
     };
     let _ = task_row;
 
-    // Workspace root as cwd.
-    let cwd: String = {
-        let conn = state.db.lock().expect("db lock");
-        conn.query_row(
-            "SELECT root_real FROM workspaces WHERE id = ?1",
-            [&workspace_id],
-            |r| r.get(0),
-        )?
-    };
-
     // Pre-task checkpoint — the safety net. A failure here aborts the task
     // rather than letting an agent loose with no way back.
     super::review::create_pre_task_checkpoint(
@@ -154,6 +155,7 @@ pub async fn agent_start_task(
             task_id.clone(),
             plan,
             std::path::Path::new(&cwd),
+            None,
             channel,
         )
         .await
@@ -504,4 +506,165 @@ pub async fn agent_action(
         .await
         .map_err(|e| AppError::Internal(crate::secret::redact(&e.to_string())))?;
     Ok(resp.data)
+}
+
+/// Reattach to a stored conversation so a follow-up CONTINUES it.
+///
+/// Without this, sending into a conversation loaded from history started a
+/// brand-new task: the agent process for the old one had long exited, and the
+/// frontend had no way to bring it back. The stored session file is the
+/// agent's own transcript, and `switch_session` is its documented resume
+/// mechanism — reattaching gives the model its full prior context, not just
+/// the text we replayed into the UI.
+#[tauri::command]
+pub async fn agent_resume_task(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    task_id: String,
+    channel: Channel<Value>,
+) -> Result<TaskView, AppError> {
+    use tauri::Manager;
+
+    // Already running? Just attach the new channel to the live stream.
+    if state.supervisor.get(&task_id).is_some() {
+        state.supervisor.subscribe(&task_id, 0, channel)?;
+        return task_view(&state, &task_id);
+    }
+
+    let (workspace_id, profile_id, session_path, cwd) = {
+        let conn = state.db.lock().expect("db lock");
+        conn.query_row(
+            "SELECT t.workspace_id, t.agent_profile_id, t.session_path, w.root_real
+               FROM tasks t JOIN workspaces w ON w.id = t.workspace_id
+              WHERE t.id = ?1",
+            [&task_id],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, String>(3)?,
+                ))
+            },
+        )
+        .map_err(|_| AppError::NotFound("task".into()))?
+    };
+
+    let preflight = crate::agent::preflight::run(None).await;
+    let resolved = preflight
+        .resolved
+        .ok_or_else(|| AppError::Validation("prime-agent is not installed".into()))?;
+    let app_cache = app.path().app_cache_dir().map_err(|e| AppError::Io(e.to_string()))?;
+    let data_dir = app.path().app_local_data_dir().map_err(|e| AppError::Io(e.to_string()))?;
+    let session_dir = data_dir.join("workspaces").join(&workspace_id).join("agent-sessions");
+    std::fs::create_dir_all(&session_dir)?;
+
+    let db = state.db.clone();
+    let keychain = state.keychain.clone();
+    let t_id = task_id.clone();
+    let cwd_plan = cwd.clone();
+    let plan = tokio::task::spawn_blocking(move || -> Result<_, AppError> {
+        let conn = db.lock().expect("db lock");
+        // Fall back to the current default if the original profile is gone.
+        let profile_id = match profile_id {
+            Some(p) if crate::profiles::get_agent_profile(&conn, &p)
+                .map_err(|e| AppError::Internal(e.to_string()))?
+                .is_some() => p,
+            _ => crate::profiles::resolve_agent_profile(&conn, None, Some(&workspace_id))
+                .map_err(|e| AppError::Internal(e.to_string()))?
+                .profile
+                .id,
+        };
+        let real_agent_dir = crate::agent::oauth_discovery::prime_home().join("agent");
+        let ctx = SpawnContext {
+            app_cache: &app_cache,
+            real_agent_dir: &real_agent_dir,
+            program: resolved.program.clone(),
+            path_env: resolved.path_env.clone(),
+            session_dir: &session_dir,
+            workspace_root: std::path::Path::new(&cwd_plan),
+        };
+        build_spawn_plan(&conn, keychain.as_ref(), &profile_id, &t_id, &ctx)
+            .map_err(|e| AppError::Internal(crate::secret::redact(&e.to_string())))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    state
+        .supervisor
+        .start(
+            state.db.clone(),
+            task_id.clone(),
+            plan,
+            std::path::Path::new(&cwd),
+            session_path,
+            channel,
+        )
+        .await?;
+
+    {
+        let conn = state.db.lock().expect("db lock");
+        conn.execute(
+            "UPDATE tasks SET status = 'running', ended_at = NULL WHERE id = ?1",
+            [&task_id],
+        )?;
+    }
+    task_view(&state, &task_id)
+}
+
+fn task_view(state: &State<'_, AppState>, task_id: &str) -> Result<TaskView, AppError> {
+    let conn = state.db.lock().expect("db lock");
+    Ok(conn.query_row(
+        "SELECT id, workspace_id, status, prompt_text, provider, model, profile_origin, created_at
+           FROM tasks WHERE id = ?1",
+        [task_id],
+        |r| {
+            Ok(TaskView {
+                id: r.get(0)?,
+                workspace_id: r.get(1)?,
+                status: r.get(2)?,
+                prompt_text: r.get(3)?,
+                provider: r.get(4)?,
+                model: r.get(5)?,
+                profile_origin: r.get(6)?,
+                created_at: r.get(7)?,
+            })
+        },
+    )?)
+}
+
+/// A short preamble sent with the FIRST message of a conversation.
+///
+/// The agent runs with the workspace as its working directory, but nothing
+/// told it so — asked to "review this project" it had no idea what "this"
+/// referred to, and would not think to run `pwd` first. This states it.
+#[tauri::command]
+pub fn workspace_preamble(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<String, AppError> {
+    let (name, root, kind): (String, String, String) = {
+        let conn = state.db.lock().expect("db lock");
+        conn.query_row(
+            "SELECT name, root_real, kind FROM workspaces WHERE id = ?1",
+            [&workspace_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .map_err(|_| AppError::NotFound("workspace".into()))?
+    };
+
+    let mut lines = vec![
+        "You are running inside Workbench, a desktop development environment."
+            .to_string(),
+        format!("Project: {name}"),
+        format!("Working directory: {root}"),
+    ];
+    if kind == "git" {
+        lines.push("This directory is a git repository.".into());
+    }
+    lines.push(
+        "When the user says \"this project\", \"the workspace\", \"the codebase\", or \"here\",          they mean that directory. All relative paths resolve from it. Read the          actual files before answering questions about the code."
+            .into(),
+    );
+    Ok(lines.join("\n"))
 }

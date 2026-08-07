@@ -112,6 +112,8 @@ pub fn run() {
             commands::tasks::chat_turns,
             commands::tasks::chat_sessions,
             commands::tasks::chat_delete_session,
+            commands::tasks::agent_resume_task,
+            commands::tasks::workspace_preamble,
             commands::tasks::agent_commands,
             commands::tasks::agent_action,
             commands::review::review_task_diff,
@@ -136,9 +138,14 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
-                // Best-effort child cleanup; kill_on_drop is the backstop.
+                // Graceful, and worth the wait: a killed agent survives us
+                // (it leaves our process group) and would keep running with a
+                // Python kernel attached. Anything still stuck past the budget
+                // is evicted when its conversation is next resumed.
                 if let Some(state) = app.try_state::<AppState>() {
-                    state.supervisor.kill_all();
+                    state
+                        .supervisor
+                        .shutdown_all(std::time::Duration::from_secs(6));
                 }
                 // Drops every session, unlinking any in-flight recording.
                 if let Some(voice) = app.try_state::<voice::session::VoiceState>() {

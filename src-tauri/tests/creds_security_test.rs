@@ -96,6 +96,7 @@ fn spawn_ctx<'a>(
         program: "prime-agent".into(),
         path_env: "/usr/bin:/bin".into(),
         session_dir,
+        workspace_root: session_dir,
     }
 }
 

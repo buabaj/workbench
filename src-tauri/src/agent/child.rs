@@ -18,6 +18,17 @@ pub trait ChildProcess: Send + 'static {
     fn write_stdin(&mut self, bytes: &[u8]) -> std::io::Result<()>;
     fn kill(&mut self) -> std::io::Result<()>;
     fn pid(&self) -> Option<u32>;
+
+    /// Ask the whole process tree to exit (SIGTERM to the group).
+    fn terminate_group(&mut self) {}
+
+    /// Drop stdin so the agent sees EOF and shuts down under its own control.
+    ///
+    /// This is not a nicety. prime-agent holds a directory lease on its
+    /// session file and releases it on a clean exit; SIGKILL leaves the lease
+    /// behind, and the next `--resume` of that session dies at startup with
+    /// "Session is already active". EOF-then-wait is what keeps resume working.
+    fn close_stdin(&mut self) {}
 }
 
 /// In-memory child for dispatcher tests: records stdin writes, exposes the
@@ -25,6 +36,7 @@ pub trait ChildProcess: Send + 'static {
 pub struct MockChild {
     pub stdin: std::sync::Arc<std::sync::Mutex<Vec<Vec<u8>>>>,
     pub killed: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub stdin_closed: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl MockChild {
@@ -40,6 +52,7 @@ impl MockChild {
         let child = MockChild {
             stdin: stdin.clone(),
             killed: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            stdin_closed: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
         (child, tx, rx, stdin)
     }
@@ -54,6 +67,11 @@ impl ChildProcess for MockChild {
     fn kill(&mut self) -> std::io::Result<()> {
         self.killed.store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(())
+    }
+
+    fn close_stdin(&mut self) {
+        self.stdin_closed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     fn pid(&self) -> Option<u32> {
@@ -85,6 +103,15 @@ impl TokioChild {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
+        // Own process group, so the whole agent tree can be signalled.
+        //
+        // `prime-agent` is a launcher: the process we spawn re-execs the real
+        // agent and a Python kernel as descendants. Killing only our direct
+        // child left those running — holding the session lease, which made
+        // reopening that conversation impossible, and leaking a process per
+        // conversation closed. Group-kill is the only way to reach them.
+        #[cfg(unix)]
+        cmd.process_group(0);
         let mut child = cmd.spawn()?;
 
         #[cfg(unix)]
@@ -180,7 +207,31 @@ impl ChildProcess for TokioChild {
     }
 
     fn kill(&mut self) -> std::io::Result<()> {
+        // Signal the group first (negative pid), then the child itself, so a
+        // launcher's descendants die with it rather than being orphaned.
+        #[cfg(unix)]
+        if let Some(pid) = self.child.id() {
+            // SAFETY: killpg on our own process group leader; the child is
+            // spawned with process_group(0) so pid == pgid.
+            unsafe {
+                libc::killpg(pid as libc::pid_t, libc::SIGKILL);
+            }
+        }
         self.child.start_kill()
+    }
+
+    fn close_stdin(&mut self) {
+        self.stdin.take();
+    }
+
+    fn terminate_group(&mut self) {
+        #[cfg(unix)]
+        if let Some(pid) = self.child.id() {
+            // SAFETY: as above; SIGTERM lets the tree clean up after itself.
+            unsafe {
+                libc::killpg(pid as libc::pid_t, libc::SIGTERM);
+            }
+        }
     }
 
     fn pid(&self) -> Option<u32> {

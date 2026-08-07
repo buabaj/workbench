@@ -9,6 +9,7 @@ pub mod discovery;
 pub mod dispatch;
 pub mod env;
 pub mod framer;
+pub mod lease;
 pub mod oauth_discovery;
 pub mod preflight;
 pub mod protocol;

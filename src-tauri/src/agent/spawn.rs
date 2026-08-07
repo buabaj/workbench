@@ -99,6 +99,8 @@ pub struct SpawnContext<'a> {
     pub program: PathBuf,
     pub path_env: String,
     pub session_dir: &'a Path,
+    /// The workspace the agent operates in — its working directory.
+    pub workspace_root: &'a Path,
 }
 
 pub fn build_spawn_plan(
@@ -119,6 +121,10 @@ pub fn build_spawn_plan(
     let cred = store::get(conn, &cred_id)?.ok_or(SpawnPlanError::ProfileNotFound)?;
 
     let mut args = vec!["--mode".to_string(), "rpc".to_string()];
+    // Explicit --cwd as well as the process working directory: the documented
+    // flag is what the agent's own tooling reads, and env_clear() drops PWD.
+    args.push("--cwd".into());
+    args.push(ctx.workspace_root.to_string_lossy().into_owned());
     args.push("--session-dir".into());
     args.push(ctx.session_dir.to_string_lossy().into_owned());
     if let Some(model) = &model_id {

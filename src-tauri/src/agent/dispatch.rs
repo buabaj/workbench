@@ -99,6 +99,8 @@ impl PendingMap {
 enum Outbound {
     Line(Vec<u8>),
     Kill,
+    /// Close stdin, allow a grace period to exit, then kill.
+    Shutdown,
 }
 
 pub struct Dispatcher {
@@ -127,7 +129,7 @@ impl Dispatcher {
             exited: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         });
 
-        tokio::spawn(writer_task(child, cmd_rx));
+        tokio::spawn(writer_task(child, cmd_rx, this.exited.clone()));
         tokio::spawn(reader_task(
             output,
             this.pending.clone(),
@@ -193,6 +195,15 @@ impl Dispatcher {
         let _ = self.cmd_tx.send(Outbound::Kill);
     }
 
+    /// Ask the agent to exit on its own, killing only if it will not.
+    ///
+    /// Prefer this to `kill` anywhere the session might be resumed later: a
+    /// clean exit releases the agent's session lease, and a killed one does
+    /// not (see `ChildProcess::close_stdin`).
+    pub fn shutdown(&self) {
+        let _ = self.cmd_tx.send(Outbound::Shutdown);
+    }
+
     pub fn has_exited(&self) -> bool {
         self.exited.load(Ordering::SeqCst)
     }
@@ -204,9 +215,29 @@ impl Dispatcher {
     }
 }
 
+/// How long a agent gets to exit on its own after stdin closes. Long enough
+/// for it to flush its session file and drop its lease; short enough that
+/// quitting the app never feels stuck.
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
+/// Additional budget after SIGTERM before the group is killed outright.
+const TERM_GRACE: Duration = Duration::from_secs(2);
+
+/// Poll the exit flag until it flips or the budget runs out.
+async fn wait_for_exit(exited: &Arc<std::sync::atomic::AtomicBool>, budget: Duration) -> bool {
+    let deadline = tokio::time::Instant::now() + budget;
+    while tokio::time::Instant::now() < deadline {
+        if exited.load(Ordering::SeqCst) {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    exited.load(Ordering::SeqCst)
+}
+
 async fn writer_task(
     mut child: Box<dyn ChildProcess>,
     mut cmd_rx: mpsc::UnboundedReceiver<Outbound>,
+    exited: Arc<std::sync::atomic::AtomicBool>,
 ) {
     while let Some(msg) = cmd_rx.recv().await {
         match msg {
@@ -217,6 +248,23 @@ async fn writer_task(
             }
             Outbound::Kill => {
                 let _ = child.kill();
+            }
+            Outbound::Shutdown => {
+                // Escalate: EOF, then SIGTERM to the group, then SIGKILL.
+                // Poll rather than wait(): the reader task owns the exit
+                // signal, and this task must not block the kill fallback.
+                child.close_stdin();
+                if wait_for_exit(&exited, SHUTDOWN_GRACE).await {
+                    return;
+                }
+                tracing::info!("agent still running after EOF; sending SIGTERM");
+                child.terminate_group();
+                if wait_for_exit(&exited, TERM_GRACE).await {
+                    return;
+                }
+                tracing::warn!("agent ignored SIGTERM; killing process group");
+                let _ = child.kill();
+                return;
             }
         }
     }

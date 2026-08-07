@@ -119,9 +119,19 @@ export const useChat = create<ChatStore>((set, get) => ({
   send: async (workspaceId, text) => {
     const { taskId, status, turns, mode, oneShot } = get();
 
+    // The agent runs WITH the workspace as its cwd but is never told so, and
+    // won't run `pwd` unprompted — asked to "review this project" it had no
+    // idea what "this" was. State it once, at the top of the conversation.
+    let preamble = "";
+    if (turns.length === 0) {
+      preamble = await ipc.workspacePreamble(workspaceId).catch(() => "");
+    }
+
     // The agent receives the composed instruction; the transcript shows what
     // the user actually typed, so history stays readable.
-    const composed = composeMessage(text, mode, oneShot);
+    const composed = preamble
+      ? `${preamble}\n\n---\n\n${composeMessage(text, mode, oneShot)}`
+      : composeMessage(text, mode, oneShot);
     set({ oneShot: null });
 
     const userTurn: Turn = { id: nextId(), role: "user", text, tools: [], streaming: false };
@@ -145,6 +155,30 @@ export const useChat = create<ChatStore>((set, get) => ({
       } catch (e) {
         get().turns[get().turns.length - 1].error = formatError(e);
         set({ status: "failed", phase: "failed", turns: [...get().turns] });
+      }
+      return;
+    }
+
+    // A conversation reopened from history has a task id but no live process:
+    // its agent exited when the app closed. Reattach to that same session
+    // rather than falling through to agent_start_task, which would mint a new
+    // id and silently strand everything said before.
+    if (taskId && status === "idle") {
+      set({ status: "starting", phase: "starting", workspaceId });
+      const channel = new Channel<TaskStreamEnvelope>();
+      channel.onmessage = (envelope) => reduce(envelope.item, set, get);
+      try {
+        await invoke<TaskView>("agent_resume_task", { taskId, channel });
+        // `prompt`, not `follow_up`: a just-resumed agent is idle, with the
+        // saved history already loaded. Verified against a live agent — it
+        // answers from the restored conversation, not from a blank one.
+        await ipc.agentSend(taskId, "prompt", composed);
+        set({ status: "streaming", phase: "thinking" });
+        void persistAll(taskId, get().turns);
+      } catch (e) {
+        const t = [...get().turns];
+        t[t.length - 1] = { ...t[t.length - 1], error: formatError(e), streaming: false };
+        set({ turns: t, status: "failed", phase: "failed" });
       }
       return;
     }
@@ -184,11 +218,17 @@ export const useChat = create<ChatStore>((set, get) => ({
    * accumulate one per conversation. */
   newConversation: async () => {
     const { taskId } = get();
-    if (taskId) await ipc.agentStopTask(taskId, false).catch(() => {});
+    // `true` means end the session, not abort a turn: passing false only sent
+    // `abort`, which leaves the agent running — one stray process, and one
+    // held session lease, for every conversation started.
+    if (taskId) await ipc.agentStopTask(taskId, true).catch(() => {});
     set({ taskId: null, turns: [], status: "idle", phase: "idle", mode: null, oneShot: null });
   },
 
   deleteSession: async (taskId) => {
+    // End its agent first, or deleting the transcript leaves the process that
+    // was writing it running with nothing to write to.
+    await ipc.agentStopTask(taskId, true).catch(() => {});
     await ipc.chatDeleteSession(taskId).catch(() => {});
     // Deleting the conversation you're in leaves you on a fresh one.
     if (get().taskId === taskId) {
@@ -197,6 +237,15 @@ export const useChat = create<ChatStore>((set, get) => ({
   },
 
   loadSession: async (taskId) => {
+    // Wind down the conversation being left. Agents are one-per-session and
+    // do not stop themselves, so browsing history would otherwise leave a
+    // live agent behind for every conversation opened. Reopening this one
+    // resumes it from its saved session file.
+    const previous = get().taskId;
+    if (previous && previous !== taskId) {
+      await ipc.agentStopTask(previous, true).catch(() => {});
+    }
+
     const rows = await ipc.chatTurns(taskId).catch(() => []);
     set({
       taskId,

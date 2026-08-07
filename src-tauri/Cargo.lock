@@ -5902,6 +5902,7 @@ dependencies = [
  "hound",
  "ignore",
  "keyring",
+ "libc",
  "notify",
  "proptest",
  "reqwest 0.12.28",

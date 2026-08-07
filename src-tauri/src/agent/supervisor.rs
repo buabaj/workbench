@@ -109,8 +109,42 @@ impl Supervisor {
         task_id: String,
         plan: SpawnPlan,
         cwd: &std::path::Path,
+        // Existing session file to reattach to, if this is a resume.
+        resume_session: Option<String>,
         channel: Channel<Value>,
     ) -> Result<StartOutcome, SupervisorError> {
+        // Resume is a spawn-time concern, not a post-handshake one. Sending
+        // `switch_session` to an already-started agent is rejected outright
+        // ("Session is already active"), because the agent takes a lease on
+        // the fresh session it just opened. `--resume` boots straight into the
+        // saved session instead — verified end to end against a live agent.
+        let mut plan = plan;
+        if let Some(path) = &resume_session {
+            // Clear the previous run's lease if its owner died without
+            // releasing it, or the agent exits during startup and the
+            // conversation appears to be unresumable forever.
+            let leases = plan
+                .config_dir
+                .as_ref()
+                .map(|d| d.agent_dir().join("session-leases"))
+                .unwrap_or_else(|| {
+                    super::oauth_discovery::prime_home()
+                        .join("agent")
+                        .join("session-leases")
+                });
+            // Safe to evict: `agent_resume_task` only reaches spawn when this
+            // task has no agent registered, so any holder is a leftover from a
+            // previous run that outlived its kill.
+            super::lease::reclaim(
+                &leases,
+                std::path::Path::new(path),
+                super::lease::OnLiveOwner::Evict,
+            );
+
+            plan.args.push("--resume".into());
+            plan.args.push(path.clone());
+        }
+
         let mut cmd = tokio::process::Command::new(&plan.program);
         cmd.args(&plan.args).current_dir(cwd).env_clear();
         for (k, v) in &plan.env_set {
@@ -214,7 +248,16 @@ impl Supervisor {
         })
     }
 
-    /// Stop escalation: abort RPC (3s grace) → kill. `force` skips the grace.
+    /// Two different intentions, not two intensities.
+    ///
+    /// `force == false` means "stop this turn": send `abort` and leave the
+    /// agent running, so the conversation can continue. `force == true` means
+    /// "end this session": wind the agent down for good.
+    ///
+    /// Ending never uses a bare kill. prime-agent leaves our process group, so
+    /// a kill orphans it — still running, still holding the session lease that
+    /// its own conversation needs to resume. `shutdown` closes stdin first and
+    /// escalates to SIGTERM/SIGKILL only if that is ignored.
     pub async fn stop(&self, task_id: &str, force: bool) -> Result<(), SupervisorError> {
         let running = self.get(task_id).ok_or(SupervisorError::NotRunning)?;
         if !force {
@@ -226,7 +269,7 @@ impl Supervisor {
                 return Ok(());
             }
         }
-        running.dispatcher.kill();
+        running.dispatcher.shutdown();
         Ok(())
     }
 
@@ -257,6 +300,42 @@ impl Supervisor {
     }
 
     /// Kill everything — app exit. Best-effort, bounded by kill_on_drop.
+    /// Wind every agent down on the way out, and wait for them.
+    ///
+    /// Killing is not enough and never was: prime-agent detaches from our
+    /// process group, so neither `kill_on_drop` nor a group kill reaches it —
+    /// measured, a killed agent and its Python kernel keep running and keep
+    /// holding the session lease. Closing stdin is what actually stops it, so
+    /// exit blocks briefly to let that finish rather than leaking a process
+    /// pair per conversation.
+    pub fn shutdown_all(&self, budget: Duration) {
+        let dispatchers: Vec<_> = self
+            .tasks
+            .read()
+            .unwrap()
+            .values()
+            .map(|t| t.dispatcher.clone())
+            .collect();
+        if dispatchers.is_empty() {
+            return;
+        }
+        for d in &dispatchers {
+            d.shutdown();
+        }
+        let deadline = std::time::Instant::now() + budget;
+        while std::time::Instant::now() < deadline {
+            if dispatchers.iter().all(|d| d.has_exited()) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let stuck = dispatchers.iter().filter(|d| !d.has_exited()).count();
+        if stuck > 0 {
+            tracing::warn!(stuck, "agents still running at exit; leases will be reclaimed on resume");
+        }
+        self.tasks.write().unwrap().clear();
+    }
+
     pub fn kill_all(&self) {
         for (_, t) in self.tasks.read().unwrap().iter() {
             t.dispatcher.kill();
