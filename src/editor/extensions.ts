@@ -109,9 +109,9 @@ const workbenchTheme = EditorView.theme(
 );
 
 /**
- * Reading mode. Body prose in Fraunces at 20px is the loudest signal that this
- * is a place to read and write, not a terminal — it's the one choice that most
- * separates Anthropic's register from a generic dev tool.
+ * Reading mode, kept for the research surface. NOT used for .md files in the
+ * editor: a Markdown file being edited is code, and styling it as prose made
+ * it unreadable as a file. Rendered output lives in MarkdownPreview instead.
  */
 const proseTheme = EditorView.theme(
   {

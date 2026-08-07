@@ -40,6 +40,8 @@ interface LayoutStore {
   railOpen: boolean;
   inspectorOpen: boolean;
   workspaceId: string | null;
+  /** Per-file Markdown view: source (default) or rendered preview. */
+  mdPreview: Record<string, boolean>;
 
   openFileTab(relPath: string): void;
   closeTab(id: string): void;
@@ -47,6 +49,7 @@ interface LayoutStore {
   focusChat(): void;
   openSettings(): void;
   cycleTab(delta: number): void;
+  toggleMdPreview(relPath: string): void;
   toggleRail(): void;
   toggleInspector(): void;
   activeFile(): string | null;
@@ -78,6 +81,7 @@ export const useLayout = create<LayoutStore>((set, get) => {
     railOpen: true,
     inspectorOpen: true,
     workspaceId: null,
+    mdPreview: {},
 
     openFileTab: (relPath) => {
       const id = fileTabId(relPath);
@@ -130,6 +134,9 @@ export const useLayout = create<LayoutStore>((set, get) => {
       const next = tabs[(i + delta + tabs.length) % tabs.length];
       if (next) get().setActive(next.id);
     },
+
+    toggleMdPreview: (relPath) =>
+      set((s) => ({ mdPreview: { ...s.mdPreview, [relPath]: !s.mdPreview[relPath] } })),
 
     toggleRail: () => {
       set((s) => ({ railOpen: !s.railOpen }));

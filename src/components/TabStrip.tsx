@@ -45,6 +45,8 @@ function TabButton({ tab }: { tab: Tab }) {
         whiteSpace: "nowrap",
         cursor: "default",
         maxWidth: 200,
+        lineHeight: 1,
+        minHeight: 26,
       }}
     >
       {tab.kind === "chat" ? (
@@ -52,7 +54,7 @@ function TabButton({ tab }: { tab: Tab }) {
       ) : tab.kind === "file" ? (
         <FileIcon name={name ?? ""} />
       ) : null}
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1 }}>{name}</span>
       {phase === "dirty" && (
         <span aria-hidden style={{ color: "var(--clay-text)", fontSize: 9 }}>
           ●

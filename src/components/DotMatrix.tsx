@@ -97,7 +97,9 @@ export function ButterflyMark({ size = 16 }: { size?: number }) {
     <svg
       width={size}
       height={size}
-      viewBox={`0 0 ${cols} ${HALF.length}`}
+      // Square viewBox around a 15x13 pattern: without it the mark is
+      // letterboxed and sits high in its box, pulling tab labels off-centre.
+      viewBox={`0 ${-(cols - HALF.length) / 2} ${cols} ${cols}`}
       aria-hidden
       style={{ flexShrink: 0, display: "block" }}
     >
@@ -129,6 +131,11 @@ export function DotWaveform({
   const rows = 5;
   const recent = levels.slice(-columns);
   const padded = [...new Array(Math.max(0, columns - recent.length)).fill(0), ...recent];
+  // Speech after AGC peaks around 0.05–0.2 of full scale, so a fixed gain left
+  // every column showing a single dot. Normalising against the loudest recent
+  // sample keeps the shape lively at any input level, with a floor so quiet
+  // rooms don't amplify noise into a full bar.
+  const peak = Math.max(0.06, ...levels.slice(-60));
   return (
     <div
       className="waveform"
@@ -139,7 +146,7 @@ export function DotWaveform({
       {padded.map((lvl, c) => {
         // Map 0..1 to how many of the 5 dots light, always at least one so the
         // shape stays legible in silence.
-        const lit = Math.max(1, Math.round(Math.min(1, lvl * 2.2) * rows));
+        const lit = Math.max(1, Math.round(Math.min(1, lvl / peak) * rows));
         return (
           <div key={c} style={{ display: "grid", gap: 2 }}>
             {new Array(rows).fill(0).map((_, r) => {

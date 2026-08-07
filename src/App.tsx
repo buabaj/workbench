@@ -188,18 +188,7 @@ export default function App() {
         <span className="bar-ws" data-tauri-drag-region>
           Workbench{workspace && <span className="dim"> / {workspace.name}</span>}
         </span>
-        <div
-          className="bar-search"
-          role="button"
-          tabIndex={0}
-          onClick={() => setPalette("files")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") setPalette("files");
-          }}
-        >
-          <span>Go to file…</span>
-          <kbd>⌘P</kbd>
-        </div>
+        <span style={{ marginLeft: "auto" }} />
         <button className="btn icon" onClick={toggleRail} aria-label="Toggle sidebar" title="Toggle sidebar (⌘B)">
           <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
             <rect x="1.5" y="2.5" width="12" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
@@ -253,11 +242,15 @@ export default function App() {
           )}
         </button>
         <button className="btn icon" onClick={openSettingsTab} aria-label="Settings" title="Settings (⌘,)">
-          <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
-            <circle cx="7.5" cy="7.5" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+          {/* A toothed gear, so it can't be mistaken for the sun above it. */}
+          <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>
             <path
-              d="M7.5 1.5v1.6M7.5 11.9v1.6M13.5 7.5h-1.6M3.1 7.5H1.5M11.7 3.3l-1.1 1.1M4.4 10.6l-1.1 1.1M11.7 11.7l-1.1-1.1M4.4 4.4L3.3 3.3"
-              stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"
+              d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
+              fill="none" stroke="currentColor" strokeWidth="1.7"
+            />
+            <path
+              d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.5h-4l-.3 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.3 2.5h4l.3-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6Z"
+              fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
             />
           </svg>
         </button>

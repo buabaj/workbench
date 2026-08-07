@@ -1,5 +1,6 @@
 import { useEditorSession } from "../editor/useEditorSession";
 import { useLayout } from "../store/layout";
+import { MarkdownPreview } from "./MarkdownPreview";
 import { saveBuffer, useWorkspace } from "../store/workspace";
 import { ipc } from "../ipc/client";
 import { editorRegistry } from "../editor/editorRegistry";
@@ -56,16 +57,68 @@ function ConflictBanner({ workspaceId, relPath }: { workspaceId: string; relPath
   );
 }
 
+function isMd(p: string): boolean {
+  const l = p.toLowerCase();
+  return l.endsWith(".md") || l.endsWith(".markdown");
+}
+
 export function EditorPane() {
   const workspace = useWorkspace((s) => s.workspace);
   const active = useLayout((s) => s.activeFile());
   const phase = useWorkspace((s) => (active ? s.buffers[active]?.phase : undefined));
+  const preview = useLayout((s) => (active ? (s.mdPreview[active] ?? false) : false));
+  const togglePreview = useLayout((s) => s.toggleMdPreview);
 
   if (!workspace || !active) return null;
+  const markdown = isMd(active);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {phase === "conflict" && <ConflictBanner workspaceId={workspace.id} relPath={active} />}
-      <Editor key={active} workspaceId={workspace.id} relPath={active} />
+      {markdown && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            padding: "var(--s-2) var(--s-3)",
+            borderBottom: "1px solid var(--border)",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", gap: 2 }} role="group" aria-label="Markdown view">
+            {(["source", "preview"] as const).map((m) => {
+              const on = (m === "preview") === preview;
+              return (
+                <button
+                  key={m}
+                  className="btn"
+                  aria-pressed={on}
+                  onClick={() => {
+                    if ((m === "preview") !== preview) togglePreview(active);
+                  }}
+                  style={{
+                    fontSize: "var(--text-xs)",
+                    padding: "3px 10px",
+                    textTransform: "capitalize",
+                    background: on ? "var(--raised)" : "transparent",
+                    borderColor: on ? "var(--border)" : "transparent",
+                    color: on ? "var(--ink)" : "var(--ink-muted)",
+                  }}
+                >
+                  {m}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {markdown && preview ? (
+        <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+          <MarkdownPreview workspaceId={workspace.id} relPath={active} />
+        </div>
+      ) : (
+        <Editor key={active} workspaceId={workspace.id} relPath={active} />
+      )}
     </div>
   );
 }

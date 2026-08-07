@@ -2,12 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { editorRegistry } from "./editorRegistry";
-import {
-  applyLanguage,
-  codeExtensions,
-  isMarkdown,
-  proseExtensions,
-} from "./extensions";
+import { applyLanguage, codeExtensions } from "./extensions";
 import { ipc, onFsChanged } from "../ipc/client";
 import { useLinks } from "../store/links";
 import { saveBuffer, useWorkspace } from "../store/workspace";
@@ -71,7 +66,10 @@ export function useEditorSession(workspaceId: string, relPath: string) {
           EditorState.create({
             doc: text,
             extensions: [
-              isMarkdown(relPath) ? proseExtensions() : codeExtensions(),
+              // Markdown opens as source: it IS code, and prose styling made
+              // files unreadable as files. Rendered output lives behind the
+              // preview toggle instead.
+              codeExtensions(),
               dirtyListener,
               saveKeymap,
             ],
@@ -84,7 +82,7 @@ export function useEditorSession(workspaceId: string, relPath: string) {
           editorRegistry.set(relPath, { state, scrollTop: 0, diskHash });
           useWorkspace.getState().markSaved(relPath, diskHash);
         }
-        if (!isMarkdown(relPath)) void applyLanguage(view, relPath);
+        void applyLanguage(view, relPath);
 
         // Cross-mode navigation: a link click parked a range for this file.
         const reveal = useWorkspace.getState().consumeReveal(relPath);

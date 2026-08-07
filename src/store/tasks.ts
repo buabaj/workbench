@@ -1,6 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type { MatrixState } from "../components/DotMatrix";
+import { describeMessage, extractDelta } from "../chat/normalize";
 import {
   ipc,
   type ResolvedAgentProfile,
@@ -13,19 +14,6 @@ export interface ToolFeedRow {
   time: string;
   name: string;
   status: "running" | "ok" | "error";
-}
-
-/**
- * TIGHTEN-LATER(assistant-message-event): the internal discriminants of
- * assistantMessageEvent are unverified upstream. This is the ONLY place that
- * interprets it — tightening later is a one-function change.
- */
-function extractDelta(ev: unknown): string {
-  if (typeof ev !== "object" || ev === null) return "";
-  const o = ev as Record<string, unknown>;
-  if (typeof o.delta === "string") return o.delta;
-  if (typeof o.text === "string") return o.text;
-  return "";
 }
 
 interface TasksStore {
@@ -126,10 +114,37 @@ function handleItem(item: StreamItem, set: Set, get: () => ReturnType<typeof use
           set({ status: "running", matrix: "thinking" });
           break;
         case "message_update": {
-          const delta = extractDelta(
-            (item as Record<string, unknown>).assistantMessageEvent,
-          );
+          const delta = extractDelta((item as Record<string, unknown>).assistantMessageEvent);
           if (delta) set({ text: get().text + delta, matrix: "thinking" });
+          break;
+        }
+        case "message_end": {
+          // The main text path: a live capture shows no message_update events,
+          // with the reply carried as content parts on message_end.
+          const m = describeMessage((item as Record<string, unknown>).message);
+          if (m.role === "assistant") {
+            if (m.errorMessage) {
+              // A failed request still emits agent_end, so without this a hard
+              // failure rendered as "complete" with an empty reply.
+              set({ status: "failed", matrix: "failed", error: m.errorMessage });
+            } else if (m.text && !get().text.includes(m.text)) {
+              set({ text: get().text ? `${get().text}\n\n${m.text}` : m.text });
+            }
+          }
+          break;
+        }
+        case "auto_retry_start": {
+          const o = item as Record<string, unknown>;
+          set({
+            toolFeed: [
+              ...get().toolFeed.slice(-11),
+              {
+                time: now(),
+                name: `retry ${o.attempt}/${o.maxAttempts} — ${String(o.errorMessage ?? "").slice(0, 80)}`,
+                status: "error",
+              },
+            ],
+          });
           break;
         }
         case "tool_execution_start": {
@@ -150,7 +165,8 @@ function handleItem(item: StreamItem, set: Set, get: () => ReturnType<typeof use
           break;
         }
         case "agent_end":
-          set({ status: "succeeded", matrix: "complete" });
+          // Only a success if nothing already failed this run.
+          if (get().status !== "failed") set({ status: "succeeded", matrix: "complete" });
           break;
         default:
           break;
