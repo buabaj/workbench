@@ -346,6 +346,8 @@ export const ipc = {
   ) => invoke<ReplaceOutcome>("search_replace", { workspaceId, query, replacement, relPaths }),
   worktreeChanges: (workspaceId: string) =>
     invoke<WorktreeChange[]>("worktree_changes", { workspaceId }),
+  /** TEMPORARY: trace line to the app data dir, for the PDF render bug. */
+  debugTrace: (text: string) => invoke<void>("debug_trace", { text }),
   notesScan: (workspaceId: string) => invoke<NoteDoc[]>("notes_scan", { workspaceId }),
   /** Run an `@agent[...]` directive written inside a note. */
   noteAction: (workspaceId: string, instruction: string, context: string) =>

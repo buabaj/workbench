@@ -294,6 +294,28 @@ pub struct NoteDoc {
     pub text: String,
 }
 
+/// TEMPORARY: append a line to a trace file in the app's data directory.
+///
+/// Deliberately NOT in the workspace. Writing a trace there fires the file
+/// watcher, which reloads panels and can remount the very component being
+/// traced — an instrument that changes the reading it takes.
+#[tauri::command]
+pub fn debug_trace(app: tauri::AppHandle, text: String) -> Result<(), AppError> {
+    use std::io::Write;
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| AppError::Io(e.to_string()))?;
+    std::fs::create_dir_all(&dir)?;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("pdf-trace.log"))?;
+    writeln!(f, "{text}").map_err(|e| AppError::Io(e.to_string()))?;
+    Ok(())
+}
+
 /// Raw bytes of a workspace file, for things text cannot represent.
 ///
 /// Returned as `Response` so they arrive as an ArrayBuffer rather than a JSON

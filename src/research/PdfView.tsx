@@ -1,8 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import { MessageSquarePlus, PenLine, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as pdfjs from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+// The LEGACY build, deliberately.
+//
+// The modern bundle calls `Map.prototype.getOrInsertComputed` — a TC39
+// proposal method — inside `page.render()`. WebKit does not have it, so every
+// render threw synchronously and the page stayed blank. The legacy build is
+// transpiled and ships the core-js polyfills, which is also why the same code
+// rendered perfectly when driven headlessly under Node against the legacy
+// entry point and never in the app.
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
+import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { ipc } from "../ipc/client";
 import { useComposer } from "../store/composer";
 import { useLayout } from "../store/layout";
@@ -39,21 +47,11 @@ const EAGER_PAGES = 3;
  * something invisible — and reading a badge off the screen depends on the badge
  * itself rendering, which is one of the things in question. A file does not.
  */
-let traceBuffer: string[] = [];
-let traceWorkspace: string | null = null;
-let traceTimer: number | undefined;
-
 function trace(line: string): void {
-  traceBuffer.push(`${new Date().toISOString().slice(11, 23)} ${line}`);
-  if (!traceWorkspace) return;
-  window.clearTimeout(traceTimer);
-  traceTimer = window.setTimeout(() => {
-    const ws = traceWorkspace;
-    if (!ws) return;
-    void ipc
-      .fileWrite(ws, ".workbench-pdf-debug.log", traceBuffer.join("\n") + "\n", null)
-      .catch(() => {});
-  }, 300);
+  // Straight to the app's data directory, not the workspace: a trace written
+  // into the workspace fires the file watcher, which reloads panels and can
+  // remount the component being traced.
+  void ipc.debugTrace(`${new Date().toISOString().slice(11, 23)} ${line}`).catch(() => {});
 }
 
 /**
@@ -111,16 +109,6 @@ function Page({
   const [visible, setVisible] = useState(pageNumber <= EAGER_PAGES);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [renderErr, setRenderErr] = useState<string | null>(null);
-  const [stats, setStats] = useState<{
-    ink: number;
-    cw: number;
-    ch: number;
-    cssW: number;
-    cssH: number;
-    vw: number;
-    vh: number;
-    dpr: number;
-  } | null>(null);
 
   // Reserve the page's space before it renders, so the scrollbar does not
   // lurch as pages fill in behind you.
@@ -152,9 +140,10 @@ function Page({
     let cancelled = false;
     let task: pdfjs.RenderTask | null = null;
 
-    trace(`p${pageNumber} render effect ran (visible=${visible})`);
+    trace(`p${pageNumber} effect start (visible=${visible})`);
     void (async () => {
       const page = await doc.getPage(pageNumber);
+      trace(`p${pageNumber} getPage ok (cancelled=${cancelled})`);
       if (cancelled) return;
       const viewport = page.getViewport({ scale });
       const canvas = canvasRef.current;
@@ -173,13 +162,16 @@ function Page({
       canvas.style.width = `${Math.floor(viewport.width)}px`;
       canvas.style.height = `${Math.floor(viewport.height)}px`;
 
-      task = page.render({
-        canvas,
-        viewport,
-        transform: dpr === 1 ? undefined : [dpr, 0, 0, dpr, 0, 0],
-        background: "#ffffff",
-      });
+      // `render()` itself is inside the try, not just its promise. It can
+      // throw synchronously, and when it did the exception escaped as an
+      // unhandled rejection — no error, no page, nothing in any log.
       try {
+        task = page.render({
+          canvas,
+          viewport,
+          transform: dpr === 1 ? undefined : [dpr, 0, 0, dpr, 0, 0],
+          background: "#ffffff",
+        });
         await task.promise;
       } catch (e) {
         // A cancelled render is routine — the page was superseded. Anything
@@ -206,16 +198,6 @@ function Page({
           `vp=${Math.round(viewport.width)}x${Math.round(viewport.height)} dpr=${dpr} ` +
           `hostCss=${hostRef.current?.clientWidth}x${hostRef.current?.clientHeight}`,
       );
-      setStats({
-        ink,
-        cw: canvas.width,
-        ch: canvas.height,
-        cssW: canvas.clientWidth,
-        cssH: canvas.clientHeight,
-        vw: Math.round(viewport.width),
-        vh: Math.round(viewport.height),
-        dpr,
-      });
       setRenderErr(null);
 
       // Text layer: real DOM text, transparent, aligned over the canvas.
@@ -238,6 +220,9 @@ function Page({
     })();
 
     return () => {
+      // Traced because a silent cancel and a hang look identical in a log
+      // that only records success.
+      trace(`p${pageNumber} CLEANUP (unmount or deps changed)`);
       cancelled = true;
       task?.cancel();
     };
@@ -263,28 +248,7 @@ function Page({
       }}
     >
       <canvas ref={canvasRef} style={{ display: "block", position: "relative", zIndex: 1 }} />
-      {stats && (
-        <div
-          // Deliberately loud and deliberately temporary: it exists to end a
-          // bug that has survived three fixes by looking identical each time.
-          style={{
-            position: "absolute",
-            top: 4,
-            left: 4,
-            zIndex: 3,
-            padding: "2px 6px",
-            background: "var(--clay)",
-            color: "#fff",
-            fontFamily: "var(--mono)",
-            fontSize: 10,
-            borderRadius: 3,
-            pointerEvents: "none",
-          }}
-        >
-          p{pageNumber} ink={stats.ink} canvas={stats.cw}×{stats.ch} css={stats.cssW}×
-          {stats.cssH} vp={stats.vw}×{stats.vh} dpr={stats.dpr}
-        </div>
-      )}
+
       {renderErr && (
         <div
           role="alert"
@@ -347,9 +311,7 @@ export function PdfView({
     let task: pdfjs.PDFDocumentLoadingTask | null = null;
     setDoc(null);
     setErr(null);
-    traceWorkspace = workspaceId;
-    traceBuffer = [];
-    trace(`mount relPath=${relPath} dpr=${window.devicePixelRatio} workerSrc=${workerUrl}`);
+    trace(`--- mount ${relPath} dpr=${window.devicePixelRatio} worker=${workerUrl}`);
 
     // A viewer that renders nothing and says nothing is indistinguishable from
     // a broken one, so loading is bounded and failure is reported.
