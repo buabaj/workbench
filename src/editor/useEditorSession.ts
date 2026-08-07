@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { EditorState } from "@codemirror/state";
+import { Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { editorRegistry } from "./editorRegistry";
 import { applyLanguage, codeExtensions, markdownExtras } from "./extensions";
@@ -164,7 +165,12 @@ export function useEditorSession(workspaceId: string, relPath: string) {
               // array index, and a popup there would be an interruption.
               ...(/\.(md|markdown)$/i.test(relPath) ? markdownExtras : []),
               dirtyListener,
-              saveKeymap,
+              // Highest precedence, deliberately. CodeMirror's defaultKeymap
+              // already binds Mod-Enter to insertBlankLine, and it is provided
+              // first — so without this our handler never sees ⌘↵ at all, and
+              // the keystroke silently inserts a blank line instead. ⌘S worked
+              // throughout only because nothing else claims Mod-s.
+              Prec.highest(saveKeymap),
             ],
           });
         view = new EditorView({ state, parent: node });
