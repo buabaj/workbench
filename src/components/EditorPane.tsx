@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { frontmatterField } from "../research/frontmatter";
 import { PdfView } from "../research/PdfView";
 import { SelectionBubble } from "../editor/SelectionBubble";
 import { useEditorSession } from "../editor/useEditorSession";
@@ -72,6 +73,24 @@ export function EditorPane() {
   const preview = useLayout((s) => (active ? (s.mdPreview[active] ?? false) : false));
   const togglePreview = useLayout((s) => s.toggleMdPreview);
 
+  // A paper note names its PDF in frontmatter. Without this the file sits on
+  // disk with nothing anywhere that opens it — the note was the only way in.
+  const [pdfPath, setPdfPath] = useState<string | null>(null);
+  const [showPdf, setShowPdf] = useState(false);
+  useEffect(() => {
+    setShowPdf(false);
+    setPdfPath(null);
+    if (!workspace || !active || !/\.(md|markdown)$/i.test(active)) return;
+    let live = true;
+    void ipc
+      .fileRead(workspace.id, active)
+      .then((c) => live && setPdfPath(frontmatterField(c.text, "pdf")))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [workspace?.id, active]);
+
   if (!workspace || !active) return null;
   // A PDF is not text; opening one in the editor would show its raw bytes.
   if (/\.pdf$/i.test(active)) {
@@ -87,11 +106,33 @@ export function EditorPane() {
           style={{
             display: "flex",
             justifyContent: "flex-end",
+            gap: "var(--s-3)",
             padding: "var(--s-2) var(--s-3)",
             borderBottom: "1px solid var(--border)",
             flexShrink: 0,
           }}
         >
+          {pdfPath && (
+            <div style={{ display: "flex", gap: 2 }} role="group" aria-label="Paper view">
+              {([false, true] as const).map((wantPdf) => (
+                <button
+                  key={String(wantPdf)}
+                  className="btn"
+                  aria-pressed={showPdf === wantPdf}
+                  onClick={() => setShowPdf(wantPdf)}
+                  style={{
+                    fontSize: "var(--text-xs)",
+                    padding: "3px 10px",
+                    background: showPdf === wantPdf ? "var(--raised)" : "transparent",
+                    borderColor: showPdf === wantPdf ? "var(--border)" : "transparent",
+                    color: showPdf === wantPdf ? "var(--ink)" : "var(--ink-muted)",
+                  }}
+                >
+                  {wantPdf ? "PDF" : "Note"}
+                </button>
+              ))}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 2 }} role="group" aria-label="Markdown view">
             {(["source", "preview"] as const).map((m) => {
               const on = (m === "preview") === preview;
@@ -119,7 +160,9 @@ export function EditorPane() {
           </div>
         </div>
       )}
-      {markdown && preview ? (
+      {markdown && showPdf && pdfPath ? (
+        <PdfView workspaceId={workspace.id} relPath={pdfPath} />
+      ) : markdown && preview ? (
         <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
           <MarkdownPreview workspaceId={workspace.id} relPath={active} />
         </div>

@@ -1,10 +1,11 @@
-import { FileText, FilePlus, Link2Off } from "lucide-react";
+import { FileDown, FileText, FilePlus, Link2Off } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatError, ipc, onFsChanged, type NoteDoc } from "../ipc/client";
 import { FileContextMenu } from "../components/FileContextMenu";
 import { useComposer } from "../store/composer";
 import { useLayout } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
+import { frontmatterField } from "./frontmatter";
 import { noteName, unresolvedTargets } from "./wikilinks";
 
 /**
@@ -56,7 +57,15 @@ export function useVault() {
  * right-click actions the file tree has, because a note is exactly the kind of
  * thing you want to hand to the agent without opening it first.
  */
-function NoteRow({ relPath, active }: { relPath: string; active: boolean }) {
+function NoteRow({
+  relPath,
+  active,
+  hasPdf,
+}: {
+  relPath: string;
+  active: boolean;
+  hasPdf: boolean;
+}) {
   const openFileTab = useLayout((s) => s.openFileTab);
   const focusChat = useLayout((s) => s.focusChat);
   const appendToChat = useComposer((s) => s.appendAndFocus);
@@ -83,6 +92,16 @@ function NoteRow({ relPath, active }: { relPath: string; active: boolean }) {
       <span className="twisty" aria-hidden />
       <FileText size={12} strokeWidth={1.7} style={{ flexShrink: 0, color: "var(--ink-faint)" }} />
       <span className="label">{noteName(relPath)}</span>
+      {hasPdf && (
+        <span
+          className="count"
+          style={{ color: "var(--clay-text)", display: "inline-flex" }}
+          title="Has a PDF"
+        >
+          <FileDown size={11} strokeWidth={1.9} />
+          <span className="sr-only">has a PDF</span>
+        </span>
+      )}
       {menu && (
         <FileContextMenu
           x={menu.x}
@@ -200,7 +219,12 @@ export function NotesPanel() {
       )}
 
       {docs.map((d) => (
-        <NoteRow key={d.relPath} relPath={d.relPath} active={activeFile === d.relPath} />
+        <NoteRow
+          key={d.relPath}
+          relPath={d.relPath}
+          active={activeFile === d.relPath}
+          hasPdf={Boolean(frontmatterField(d.text, "pdf"))}
+        />
       ))}
 
       {missing.length > 0 && (
