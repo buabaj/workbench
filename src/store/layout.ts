@@ -32,14 +32,24 @@ interface Persisted {
   activeTabId: string;
   railOpen: boolean;
   inspectorOpen: boolean;
+  /** Which stance the workspace was last in. Per workspace, not global: a
+   *  notes vault and a codebase want different answers. */
+  mode?: "code" | "research";
 }
 
 interface LayoutStore {
+  /**
+   * Code or research. A top-level stance, not a filter: it changes what the
+   * rail and inspector are FOR, because reading and writing notes wants a
+   * different set of tools than changing code does.
+   */
+  mode: "code" | "research";
+  setMode(mode: "code" | "research"): void;
   /** Which rail view is showing. In the store so other panels can switch it. */
-  railTab: "files" | "search" | "changes";
+  railTab: "files" | "search" | "changes" | "notes" | "links";
   /** A file the Changes panel should scroll to and expand. */
   changesFocus: string | null;
-  setRailTab(tab: "files" | "search" | "changes"): void;
+  setRailTab(tab: "files" | "search" | "changes" | "notes" | "links"): void;
   showInChanges(relPath: string): void;
   clearChangesFocus(): void;
 
@@ -69,7 +79,7 @@ let persistTimer: number | undefined;
 export const useLayout = create<LayoutStore>((set, get) => {
   /** Debounced so dragging or rapid tab changes don't hammer SQLite. */
   const persist = () => {
-    const { workspaceId, tabs, activeTabId, railOpen, inspectorOpen } = get();
+    const { workspaceId, tabs, activeTabId, railOpen, inspectorOpen, mode } = get();
     if (!workspaceId) return;
     window.clearTimeout(persistTimer);
     persistTimer = window.setTimeout(() => {
@@ -78,6 +88,7 @@ export const useLayout = create<LayoutStore>((set, get) => {
         activeTabId,
         railOpen,
         inspectorOpen,
+        mode,
       };
       void ipc.workspaceSettingSet(workspaceId, LAYOUT_KEY, payload).catch(() => {});
     }, 300);
@@ -146,6 +157,11 @@ export const useLayout = create<LayoutStore>((set, get) => {
     toggleMdPreview: (relPath) =>
       set((s) => ({ mdPreview: { ...s.mdPreview, [relPath]: !s.mdPreview[relPath] } })),
 
+    mode: "code",
+    setMode: (mode) => {
+      set({ mode, railTab: mode === "research" ? "notes" : "files" });
+      persist();
+    },
     railTab: "files",
     changesFocus: null,
     setRailTab: (railTab) => set({ railTab }),
@@ -194,6 +210,10 @@ export const useLayout = create<LayoutStore>((set, get) => {
         activeTabId,
         railOpen: saved.railOpen ?? true,
         inspectorOpen: saved.inspectorOpen ?? true,
+        mode: saved.mode ?? "code",
+        // The rail views differ per mode, so a stale tab from the other one
+        // would land on a panel that no longer exists.
+        railTab: saved.mode === "research" ? "notes" : "files",
       });
     },
   };

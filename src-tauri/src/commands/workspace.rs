@@ -287,6 +287,82 @@ pub fn worktree_changes(
     Ok(crate::vcs::worktree::changes(root.real())?)
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteDoc {
+    pub rel_path: String,
+    pub text: String,
+}
+
+/// Every markdown note in the workspace, with its text.
+///
+/// Backlinks need the whole vault at once: you cannot know what links to a
+/// note by reading that note. Sending the text lets link resolution stay in
+/// one tested place on the frontend rather than being reimplemented here.
+///
+/// Bounded on both counts — a vault is notes, and a repository that happens to
+/// contain a large generated markdown tree should not be able to exhaust
+/// memory through this door.
+#[tauri::command]
+pub fn notes_scan(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+) -> Result<Vec<NoteDoc>, AppError> {
+    const MAX_NOTES: usize = 5_000;
+    const MAX_BYTES: usize = 32 * 1024 * 1024;
+    const MAX_NOTE_BYTES: u64 = 2 * 1024 * 1024;
+
+    let root = root_for(&open, &workspace_id)?;
+    let real = root.real();
+    let mut out = Vec::new();
+    let mut total = 0usize;
+
+    let walker = ignore::WalkBuilder::new(real)
+        .hidden(false)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .require_git(false)
+        .filter_entry(|e| e.file_name() != ".git")
+        .build();
+
+    for entry in walker.flatten() {
+        if out.len() >= MAX_NOTES || total >= MAX_BYTES {
+            break;
+        }
+        if !entry.file_type().is_some_and(|t| t.is_file()) {
+            continue;
+        }
+        let path = entry.path();
+        let is_md = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown"));
+        if !is_md {
+            continue;
+        }
+        // A single enormous file is skipped rather than truncated: half a note
+        // would silently lose the links in its second half.
+        if entry.metadata().map(|m| m.len()).unwrap_or(0) > MAX_NOTE_BYTES {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue; // unreadable or not UTF-8
+        };
+        total += text.len();
+        out.push(NoteDoc {
+            rel_path: path
+                .strip_prefix(real)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .into_owned(),
+            text,
+        });
+    }
+    out.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+    Ok(out)
+}
+
 /// Branch and upstream state, for the change list's header.
 #[tauri::command]
 pub fn worktree_branch(

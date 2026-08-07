@@ -20,6 +20,11 @@ export interface WorktreeChange {
   untracked: boolean;
 }
 
+export interface NoteDoc {
+  relPath: string;
+  text: string;
+}
+
 export interface BranchState {
   branch: string | null;
   upstream: string | null;
@@ -320,6 +325,7 @@ export const ipc = {
   ) => invoke<ReplaceOutcome>("search_replace", { workspaceId, query, replacement, relPaths }),
   worktreeChanges: (workspaceId: string) =>
     invoke<WorktreeChange[]>("worktree_changes", { workspaceId }),
+  notesScan: (workspaceId: string) => invoke<NoteDoc[]>("notes_scan", { workspaceId }),
   worktreeBranch: (workspaceId: string) =>
     invoke<BranchState>("worktree_branch", { workspaceId }),
   worktreePatch: (workspaceId: string, relPath: string) =>

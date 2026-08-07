@@ -7,6 +7,8 @@ import {
   ChevronsDownUp,
   Files,
   FilePlus,
+  Link2,
+  NotebookPen,
   FolderPlus,
   GitBranch,
   Moon,
@@ -29,6 +31,8 @@ import { SettingsView } from "./components/SettingsView";
 import { applyMention, mentionQueryAt } from "./chat/mentions";
 import { MentionMenu } from "./components/MentionMenu";
 import { ChangesPanel } from "./components/ChangesPanel";
+import { BacklinksPanel } from "./research/BacklinksPanel";
+import { NotesPanel } from "./research/NotesPanel";
 import { SearchPanel } from "./components/SearchPanel";
 import { SlashMenu } from "./components/SlashMenu";
 import { TerminalDock } from "./terminal/TerminalDock";
@@ -48,6 +52,14 @@ const RAIL_TABS = [
   { key: "files" as const, label: "Files", Icon: Files },
   { key: "search" as const, label: "Search (⇧⌘F)", Icon: Search },
   { key: "changes" as const, label: "Changes", Icon: GitBranch },
+];
+
+/** Research swaps the rail wholesale: a vault wants notes and links, not
+ *  diffs. Search stays, because finding a passage matters more here, not less. */
+const RESEARCH_TABS = [
+  { key: "notes" as const, label: "Notes", Icon: NotebookPen },
+  { key: "search" as const, label: "Search (⇧⌘F)", Icon: Search },
+  { key: "links" as const, label: "Backlinks", Icon: Link2 },
 ];
 
 export default function App() {
@@ -97,6 +109,8 @@ export default function App() {
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
   const [commandNote, setCommandNote] = useState<string | null>(null);
+  const mode = useLayout((s) => s.mode);
+  const setMode = useLayout((s) => s.setMode);
   const railTab = useLayout((s) => s.railTab);
   const setRailTab = useLayout((s) => s.setRailTab);
   const [creating, setCreating] = useState<"file" | "dir" | null>(null);
@@ -318,6 +332,28 @@ export default function App() {
         <span className="bar-ws" data-tauri-drag-region>
           Workbench{workspace && <span className="dim"> / {workspace.name}</span>}
         </span>
+        {/* A stance, not a filter: it changes what the rail and inspector are
+            for. Kept in the header because it is the highest-level choice
+            there is — everything below reads differently under it. */}
+        {workspace && (
+          <div className="mode-switch" role="group" aria-label="Mode">
+            {(["code", "research"] as const).map((m) => (
+              <button
+                key={m}
+                className={`mode-opt ${mode === m ? "on" : ""}`}
+                aria-pressed={mode === m}
+                onClick={() => setMode(m)}
+                title={
+                  m === "code"
+                    ? "Code — files, search, changes"
+                    : "Research — notes, backlinks"
+                }
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        )}
         <span style={{ marginLeft: "auto" }} />
         <button className="btn icon" onClick={toggleRail} aria-label="Toggle sidebar" title="Toggle sidebar (⌘B)">
           <PanelLeft size={15} strokeWidth={1.6} />
@@ -366,7 +402,7 @@ export default function App() {
                     every editor, because a text label per view eats the width
                     the tree actually needs. */}
                 <div className="rail-tabs" role="tablist" aria-label="Rail views">
-                  {RAIL_TABS.map(({ key, label, Icon }) => (
+                  {(mode === "research" ? RESEARCH_TABS : RAIL_TABS).map(({ key, label, Icon }) => (
                     <button
                       key={key}
                       role="tab"
@@ -395,7 +431,7 @@ export default function App() {
                     )}
                   </button>
                   <span className="rail-head-label">
-                    {railTab === "files" ? workspace.name : railTab}
+                    {railTab === "files" || railTab === "notes" ? workspace.name : railTab}
                   </span>
                   <span className="rail-head-actions">
                     {railTab === "files" && (
@@ -433,7 +469,15 @@ export default function App() {
                 </div>
 
                 {sectionOpen &&
-                  (railTab === "files" ? (
+                  (railTab === "notes" ? (
+                    <div style={{ padding: "0 var(--s-2)" }}>
+                      <NotesPanel />
+                    </div>
+                  ) : railTab === "links" ? (
+                    <div style={{ padding: "0 var(--s-2)" }}>
+                      <BacklinksPanel />
+                    </div>
+                  ) : railTab === "files" ? (
                     <FileTree creating={creating} onCreateDone={() => setCreating(null)} />
                   ) : (
                     /* The tree indents itself; these panels need the gutter. */

@@ -106,6 +106,7 @@ pub fn run() {
             commands::workspace::worktree_changes,
             commands::workspace::worktree_patch,
             commands::workspace::worktree_branch,
+            commands::workspace::notes_scan,
             commands::workspace::file_create,
             commands::workspace::dir_create,
             commands::workspace::workspace_index,

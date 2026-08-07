@@ -570,3 +570,30 @@ body {
 /* .term-split is styled inline in TerminalDock: it is the one element whose
    entire purpose is to be visible, and it should not depend on the cascade
    reaching it. The class remains as a handle for tests. */
+
+/* Mode switch: a segmented control, small and quiet. The chosen side is
+   filled rather than merely tinted, because this is the one control whose
+   state changes what every panel below it means. */
+.mode-switch {
+  display: inline-flex;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+}
+.mode-opt {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  letter-spacing: 0.03em;
+  text-transform: capitalize;
+  color: var(--ink-faint);
+  cursor: default;
+  transition: background var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
+}
+.mode-opt:hover { color: var(--ink-secondary); }
+.mode-opt.on { background: var(--canvas); color: var(--clay-text); }
