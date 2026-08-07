@@ -32,6 +32,7 @@ interface WorkspaceStore {
   pickWorkspace(): Promise<void>;
   openWorkspace(path: string): Promise<void>;
   loadChildren(subpath: string): Promise<void>;
+  collapseAll(): void;
   toggleDir(relPath: string): void;
   openFile(relPath: string): void;
   revealRange(relPath: string, from: number, to: number): void;
@@ -89,6 +90,9 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       void get().loadChildren(relPath);
     }
   },
+
+  /** Fold every directory shut, leaving the root level visible. */
+  collapseAll: () => set({ expanded: {} }),
 
   openFile: (relPath) => {
     useLayout.getState().openFileTab(relPath);

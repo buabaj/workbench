@@ -2,11 +2,17 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { ChatView, PLACEHOLDER } from "./components/ChatView";
 import {
   ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  ChevronsDownUp,
+  Files,
   FilePlus,
   FolderPlus,
+  GitBranch,
   Moon,
   PanelLeft,
   PanelRight,
+  Search,
   Settings,
   SquareTerminal,
   Sun,
@@ -36,6 +42,13 @@ import { useTheme } from "./store/theme";
 import { useChat } from "./store/chat";
 import { useVoice } from "./store/voice";
 import { useWorkspace } from "./store/workspace";
+
+/** The rail's views. Icons only: a label per view costs width the tree needs. */
+const RAIL_TABS = [
+  { key: "files" as const, label: "Files", Icon: Files },
+  { key: "search" as const, label: "Search (⇧⌘F)", Icon: Search },
+  { key: "changes" as const, label: "Changes", Icon: GitBranch },
+];
 
 export default function App() {
   const workspace = useWorkspace((s) => s.workspace);
@@ -82,6 +95,7 @@ export default function App() {
   const [commandNote, setCommandNote] = useState<string | null>(null);
   const [railTab, setRailTab] = useState<"files" | "search" | "changes">("files");
   const [creating, setCreating] = useState<"file" | "dir" | null>(null);
+  const [sectionOpen, setSectionOpen] = useState(true);
   const [terminalOpen, setTerminalOpen] = useState(false);
   /** Mounted — and so still running — independently of being visible. */
   const [terminalAlive, setTerminalAlive] = useState(false);
@@ -327,51 +341,86 @@ export default function App() {
           <ErrorBoundary>
             {workspace ? (
               <div className="rail-section">
-                {/* Files, Search and Changes share the rail rather than
-                    stacking: each wants the full height. The tabs replace the
-                    section heading, so they carry its type, not a button's. */}
-                <div className="rail-tabs" role="tablist" aria-label="Rail">
-                  {(["files", "search", "changes"] as const).map((t) => (
+                {/* Icon strip, then a section header carrying the actions
+                    that apply to the current view — the shape a sidebar has in
+                    every editor, because a text label per view eats the width
+                    the tree actually needs. */}
+                <div className="rail-tabs" role="tablist" aria-label="Rail views">
+                  {RAIL_TABS.map(({ key, label, Icon }) => (
                     <button
-                      key={t}
+                      key={key}
                       role="tab"
-                      className={`rail-tab ${railTab === t ? "on" : ""}`}
-                      aria-selected={railTab === t}
-                      onClick={() => setRailTab(t)}
+                      className={`rail-tab ${railTab === key ? "on" : ""}`}
+                      aria-selected={railTab === key}
+                      aria-label={label}
+                      title={label}
+                      onClick={() => setRailTab(key)}
                     >
-                      {t}
+                      <Icon size={15} strokeWidth={1.7} />
                     </button>
                   ))}
-                  {railTab === "files" && (
-                    <span className="rail-tab-actions">
-                      <button
-                        className="btn icon"
-                        aria-label="New file"
-                        title="New file"
-                        onClick={() => setCreating("file")}
-                        style={{ padding: 2, color: "var(--ink-faint)" }}
-                      >
-                        <FilePlus size={13} strokeWidth={1.7} />
-                      </button>
-                      <button
-                        className="btn icon"
-                        aria-label="New folder"
-                        title="New folder"
-                        onClick={() => setCreating("dir")}
-                        style={{ padding: 2, color: "var(--ink-faint)" }}
-                      >
-                        <FolderPlus size={13} strokeWidth={1.7} />
-                      </button>
-                    </span>
-                  )}
                 </div>
-                {railTab === "files" ? (
-                  <FileTree creating={creating} onCreateDone={() => setCreating(null)} />
-                ) : railTab === "search" ? (
-                  <SearchPanel />
-                ) : (
-                  <ChangesPanel />
-                )}
+
+                <div className="rail-head">
+                  <button
+                    className="rail-head-twisty"
+                    aria-label={sectionOpen ? "Collapse section" : "Expand section"}
+                    aria-expanded={sectionOpen}
+                    onClick={() => setSectionOpen((v) => !v)}
+                  >
+                    {sectionOpen ? (
+                      <ChevronDown size={12} strokeWidth={2} />
+                    ) : (
+                      <ChevronRight size={12} strokeWidth={2} />
+                    )}
+                  </button>
+                  <span className="rail-head-label">
+                    {railTab === "files" ? workspace.name : railTab}
+                  </span>
+                  <span className="rail-head-actions">
+                    {railTab === "files" && (
+                      <>
+                        <button
+                          className="btn icon"
+                          aria-label="New file"
+                          title="New file"
+                          onClick={() => setCreating("file")}
+                          style={{ padding: 3, color: "var(--ink-faint)" }}
+                        >
+                          <FilePlus size={13} strokeWidth={1.7} />
+                        </button>
+                        <button
+                          className="btn icon"
+                          aria-label="New folder"
+                          title="New folder"
+                          onClick={() => setCreating("dir")}
+                          style={{ padding: 3, color: "var(--ink-faint)" }}
+                        >
+                          <FolderPlus size={13} strokeWidth={1.7} />
+                        </button>
+                        <button
+                          className="btn icon"
+                          aria-label="Collapse all folders"
+                          title="Collapse all"
+                          onClick={() => useWorkspace.getState().collapseAll()}
+                          style={{ padding: 3, color: "var(--ink-faint)" }}
+                        >
+                          <ChevronsDownUp size={13} strokeWidth={1.7} />
+                        </button>
+                      </>
+                    )}
+                  </span>
+                </div>
+
+                {sectionOpen &&
+                  (railTab === "files" ? (
+                    <FileTree creating={creating} onCreateDone={() => setCreating(null)} />
+                  ) : (
+                    /* The tree indents itself; these panels need the gutter. */
+                    <div style={{ padding: "0 var(--s-3)" }}>
+                      {railTab === "search" ? <SearchPanel /> : <ChangesPanel />}
+                    </div>
+                  ))}
               </div>
             ) : (
               <>
