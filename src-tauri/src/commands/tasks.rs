@@ -174,8 +174,9 @@ pub async fn agent_start_task(
     {
         let conn = state.db.lock().expect("db lock");
         conn.execute(
-            "UPDATE tasks SET session_id = ?1, session_path = ?2 WHERE id = ?3",
-            rusqlite::params![outcome.session_id, outcome.session_path, task_id],
+            "UPDATE tasks SET session_id = ?1, session_path = ?2,
+                              model = COALESCE(?3, model) WHERE id = ?4",
+            rusqlite::params![outcome.session_id, outcome.session_path, outcome.model, task_id],
         )?;
     }
 

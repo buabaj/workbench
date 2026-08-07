@@ -78,6 +78,21 @@ pub enum SupervisorError {
 pub struct StartOutcome {
     pub session_id: Option<String>,
     pub session_path: Option<String>,
+    /// What the agent will actually use — resolved, not requested.
+    pub model: Option<String>,
+}
+
+/// Model ids reported by `get_available_models`, for a provider.
+fn models_for(data: &Value, provider: &str) -> Vec<String> {
+    data.get("models")
+        .and_then(|m| m.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter(|m| m.get("provider").and_then(|p| p.as_str()) == Some(provider))
+                .filter_map(|m| m.get("id").and_then(|i| i.as_str()).map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 impl Supervisor {
@@ -136,6 +151,42 @@ impl Supervisor {
             .and_then(|v| v.as_str())
             .map(String::from);
 
+        // If the profile named no model, pick one belonging to the SELECTED
+        // provider rather than inheriting whatever default is lying around —
+        // that inheritance is what silently routed work to another provider.
+        let mut model = plan.model_id.clone();
+        if model.is_none() {
+            if let Some(provider) = &plan.provider_slug {
+                if let Ok(list) = dispatcher
+                    .request("get_available_models", json!({}), Duration::from_secs(20))
+                    .await
+                {
+                    let candidates = models_for(&list.data.unwrap_or(Value::Null), provider);
+                    if let Some(first) = candidates.first() {
+                        // Params are `provider` + `modelId`, NOT `model` —
+                        // verified against the live RPC, which rejects the
+                        // latter with "Model not found: undefined/undefined".
+                        match dispatcher
+                            .request(
+                                "set_model",
+                                json!({ "provider": provider, "modelId": first }),
+                                Duration::from_secs(15),
+                            )
+                            .await
+                        {
+                            Ok(_) => {
+                                model = Some(first.clone());
+                                tracing::info!(provider, model = %first, "pinned model for provider");
+                            }
+                            Err(e) => tracing::warn!(provider, error = %e, "set_model failed"),
+                        }
+                    } else {
+                        tracing::warn!(provider, "provider reports no available models");
+                    }
+                }
+            }
+        }
+
         let running = Arc::new(RunningTask {
             task_id: task_id.clone(),
             dispatcher: dispatcher.clone(),
@@ -159,6 +210,7 @@ impl Supervisor {
         Ok(StartOutcome {
             session_id,
             session_path,
+            model,
         })
     }
 

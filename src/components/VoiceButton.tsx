@@ -1,5 +1,6 @@
 import { Mic, Square, X } from "lucide-react";
 import { AgentOrb } from "./AgentOrb";
+import { DotWaveform } from "./ButterflyMark";
 import type { VoicePhase } from "../store/voice";
 
 function formatElapsed(ms: number): string {
@@ -8,18 +9,21 @@ function formatElapsed(ms: number): string {
 }
 
 /**
- * Recording shows the orb in its `listening` state with the elapsed time in
- * tabular figures, so the row doesn't jitter as digits change.
+ * Recording shows a live dot-column level meter — it proves the microphone is
+ * hearing you, which a generic animation cannot. The orb is reserved for
+ * thinking, so the two states never look alike.
  */
 export function VoiceButton({
   phase,
   elapsedMs,
+  levels,
   configured,
   onToggle,
   onCancel,
 }: {
   phase: VoicePhase;
   elapsedMs: number;
+  levels: number[];
   configured: boolean;
   onToggle: () => void;
   onCancel: () => void;
@@ -32,17 +36,17 @@ export function VoiceButton({
           alignItems: "center",
           gap: "var(--s-2)",
           padding: "5px 8px 5px 10px",
-          border: "1px solid var(--border-strong)",
+          border: "1px solid var(--clay)",
           borderRadius: "var(--r-pill)",
-          background: "var(--surface)",
+          background: "var(--clay-wash)",
         }}
       >
-        <AgentOrb phase="listening" />
+        <DotWaveform levels={levels} />
         <span
           style={{
             fontSize: "var(--text-xs)",
             fontVariantNumeric: "tabular-nums",
-            color: "var(--ink-secondary)",
+            color: "var(--clay-text)",
             minWidth: 30,
           }}
         >

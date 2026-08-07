@@ -18,9 +18,17 @@ use std::path::{Path, PathBuf};
 pub const PROVIDER_KEY_VAR: &str = "WORKBENCH_PROVIDER_KEY";
 
 /// Entries that must NEVER be linked into the isolated dir.
+///
+/// `settings.json` is on this list for a specific reason: the host file carries
+/// `defaultProvider` and `defaultModel`, and prime-agent applies the default
+/// MODEL even when `--provider` names a different provider. A host default of
+/// `prime-inference` / `z-ai/glm-5.2` therefore silently billed a Prime account
+/// while the user believed they were using their own key. We write our own
+/// minimal settings instead, carrying preferences but never provider routing.
 const NEVER_LINK: &[&str] = &[
     "auth.json",
     "models.json",
+    "settings.json",
     "sessions",
     "session-artifacts",
     "session-leases",
@@ -111,6 +119,14 @@ impl IsolatedConfigDir {
             std::fs::write(&models_path, serde_json::to_vec_pretty(&models).unwrap())?;
             std::fs::set_permissions(&models_path, std::fs::Permissions::from_mode(0o600))?;
         }
+
+        // Our own settings: preferences only, never provider routing.
+        let settings = serde_json::json!({
+            "onboardingShown": true,
+            "defaultThinkingLevel": "medium"
+        });
+        let settings_path = agent_dir.join("settings.json");
+        std::fs::write(&settings_path, serde_json::to_vec_pretty(&settings).unwrap())?;
 
         // Symlink the rest of the user's real agent dir.
         if real_agent_dir.is_dir() {

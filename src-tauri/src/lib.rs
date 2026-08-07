@@ -102,6 +102,7 @@ pub fn run() {
             commands::workspace::workspace_setting_set,
             commands::agent_setup::agent_preflight,
             commands::agent_setup::agent_set_executable_path,
+            commands::agent_setup::agent_list_models,
             commands::tasks::agent_start_task,
             commands::tasks::agent_stop_task,
             commands::tasks::agent_send,

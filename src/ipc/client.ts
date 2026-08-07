@@ -177,6 +177,12 @@ export interface ModelInfo {
   pricePrompt: string | null;
 }
 
+export interface AgentModel {
+  id: string;
+  provider: string;
+  name: string | null;
+}
+
 export interface AnchorSpec {
   relPath: string;
   from: number;
@@ -234,6 +240,8 @@ export const ipc = {
     expectedHash: string | null,
   ) => invoke<WriteOutcome>("file_write", { workspaceId, path, text, expectedHash }),
   agentPreflight: () => invoke<PreflightReport>("agent_preflight"),
+  agentListModels: (credentialProfileId: string) =>
+    invoke<AgentModel[]>("agent_list_models", { credentialProfileId }),
   workspaceIndex: (workspaceId: string, refresh: boolean) =>
     invoke<string[]>("workspace_index", { workspaceId, refresh }),
   workspaceSettingGet: (workspaceId: string, key: string) =>

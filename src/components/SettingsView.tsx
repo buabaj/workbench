@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PreflightPanel } from "./Preflight";
-import { formatError, ipc, type CredentialProfileView, type HostAuthSummary } from "../ipc/client";
+import { formatError, ipc, type AgentModel, type CredentialProfileView, type HostAuthSummary } from "../ipc/client";
 import { useTasks } from "../store/tasks";
 import { useTheme, type ThemeChoice } from "../store/theme";
 import { useWorkspace } from "../store/workspace";
@@ -147,6 +147,8 @@ export function SettingsView() {
   const [model, setModel] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [models, setModels] = useState<AgentModel[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
   const keyRef = useRef<HTMLInputElement>(null);
 
   const reload = async () => {
@@ -190,6 +192,20 @@ export function SettingsView() {
       setErr(formatError(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Ask the agent which models this credential can actually reach. Without an
+   * explicit model, prime-agent falls back to a default that may belong to a
+   * DIFFERENT provider — which is how work got billed to the wrong account. */
+  const loadModels = async (credentialId: string) => {
+    setLoadingModels(true);
+    try {
+      setModels(await ipc.agentListModels(credentialId));
+    } catch (e) {
+      setErr(formatError(e));
+    } finally {
+      setLoadingModels(false);
     }
   };
 
@@ -294,16 +310,36 @@ export function SettingsView() {
         </Row>
 
         {creds.length > 0 && (
-          <Row label="Saved credentials">
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <Row label="Saved credentials" hint="Pick a model so work isn't billed to another provider.">
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
               {creds.map((c) => (
-                <div key={c.id} style={{ display: "flex", gap: 8, fontSize: "var(--text-sm)" }}>
+                <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: "var(--text-sm)" }}>
                   <span style={{ flex: 1 }}>{c.label}</span>
                   <span style={{ color: "var(--ink-faint)", fontFamily: "var(--mono)", fontSize: 11 }}>
                     {c.keyFingerprint ?? "host"}
                   </span>
+                  <button className="btn" style={{ fontSize: "var(--text-xs)" }} disabled={loadingModels}
+                          onClick={() => void loadModels(c.id)}>
+                    {loadingModels ? "Checking…" : "Models"}
+                  </button>
                 </div>
               ))}
+              {models.length > 0 && (
+                <div style={{ marginTop: "var(--s-2)" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--ink-faint)", marginBottom: 4 }}>
+                    {models.length} model{models.length === 1 ? "" : "s"} reachable — first is used unless you set one
+                  </div>
+                  <div style={{ maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+                    {models.slice(0, 40).map((m) => (
+                      <div key={`${m.provider}/${m.id}`}
+                           style={{ display: "flex", gap: 8, fontSize: "var(--text-xs)", fontFamily: "var(--mono)" }}>
+                        <span style={{ color: "var(--ink-faint)", minWidth: 110 }}>{m.provider}</span>
+                        <span>{m.id}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </Row>
         )}

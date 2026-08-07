@@ -42,8 +42,9 @@ export const PHASE_LABEL: Record<AgentPhase, string> = {
   failed: "Failed",
 };
 
-/** Phases where nothing is actually happening — the orb holds still. */
-const STATIC: AgentPhase[] = ["idle", "complete", "failed"];
+/** Terminal phases hold still. Idle keeps a slow breath: a completely frozen
+ * indicator reads as broken rather than restful. */
+const STATIC: AgentPhase[] = ["complete", "failed"];
 
 export function AgentOrb({
   phase,
@@ -62,7 +63,7 @@ export function AgentOrb({
         state={ORB_STATE[phase]}
         size={size}
         paused={STATIC.includes(phase)}
-        speed={phase === "tools" ? 1.25 : 1}
+        speed={phase === "idle" ? 0.5 : phase === "tools" ? 1.25 : 1}
       />
     </span>
   );

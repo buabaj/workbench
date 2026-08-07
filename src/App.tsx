@@ -79,6 +79,7 @@ export default function App() {
 
   const voicePhase = useVoice((s) => s.phase);
   const voiceElapsed = useVoice((s) => s.elapsedMs);
+  const voiceLevels = useVoice((s) => s.levels);
   const voiceError = useVoice((s) => s.error);
   const voiceCapability = useVoice((s) => s.capability);
   const toggleVoice = useVoice((s) => s.toggle);
@@ -306,6 +307,7 @@ export default function App() {
             <VoiceButton
               phase={voicePhase}
               elapsedMs={voiceElapsed}
+              levels={voiceLevels}
               configured={Boolean(voiceCapability?.configured)}
               onToggle={() => void toggleVoice(insertTranscript)}
               onCancel={() => void cancelVoice()}
