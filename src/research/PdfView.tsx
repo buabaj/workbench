@@ -81,6 +81,29 @@ function countInk(canvas: HTMLCanvasElement): number {
 }
 
 /**
+ * Collect a page's text items, without async iteration.
+ *
+ * `page.getTextContent()` is the obvious call and cannot be used: internally
+ * it does `for await (const value of readableStream)`, and WebKit does not
+ * implement `ReadableStream[Symbol.asyncIterator]`. It therefore rejects
+ * before any of our code runs — which is why the failure looked like a bug in
+ * our own `for...of` and why it never reproduced under Node, whose streams are
+ * async-iterable.
+ *
+ * A reader does the same job with an API that exists everywhere.
+ */
+async function readTextItems(page: pdfjs.PDFPageProxy): Promise<unknown[]> {
+  const reader = page.streamTextContent().getReader();
+  const items: unknown[] = [];
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (value?.items) items.push(...value.items);
+  }
+  return items;
+}
+
+/**
  * Position the selectable text over a rendered page.
  *
  * Written here rather than using pdf.js's own `TextLayer`, which threw
@@ -96,13 +119,13 @@ function countInk(canvas: HTMLCanvasElement): number {
  */
 function buildTextLayer(
   host: HTMLDivElement,
-  content: { items: unknown[] },
+  rawItems: unknown[],
   viewport: { transform: number[]; width: number; height: number },
 ): void {
   host.replaceChildren();
   const frag = document.createDocumentFragment();
 
-  for (const raw of content.items) {
+  for (const raw of rawItems) {
     const item = raw as {
       str?: string;
       transform?: number[];
@@ -135,7 +158,7 @@ function buildTextLayer(
 
   // Match each span's rendered width to the run's real width, so the selection
   // rectangle lands on the glyphs beneath rather than drifting along the line.
-  const items = content.items as Array<{ str?: string; width?: number; transform?: number[] }>;
+  const items = rawItems as Array<{ str?: string; width?: number; transform?: number[] }>;
   let i = 0;
   for (const el of Array.from(host.children) as HTMLElement[]) {
     while (i < items.length && (!items[i].str || !items[i].transform)) i++;
@@ -275,9 +298,9 @@ function Page({
       try {
         const textHost = textRef.current;
         if (textHost) {
-          const content = await page.getTextContent();
+          const items = await readTextItems(page);
           if (cancelled) return;
-          buildTextLayer(textHost, content, viewport);
+          buildTextLayer(textHost, items, viewport);
           trace(`p${pageNumber} text layer: ${textHost.childElementCount} spans`);
         }
       } catch (e) {
