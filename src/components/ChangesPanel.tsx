@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   formatError,
@@ -45,100 +45,6 @@ function statusColor(status: string, untracked: boolean): string {
   }
 }
 
-/** Unified patch, coloured by origin marker. */
-function Patch({ workspaceId, relPath }: { workspaceId: string; relPath: string }) {
-  const [patch, setPatch] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    void ipc
-      .worktreePatch(workspaceId, relPath)
-      .then((p) => live && setPatch(p))
-      .catch((e) => live && setErr(formatError(e)));
-    return () => {
-      live = false;
-    };
-  }, [workspaceId, relPath]);
-
-  if (err) {
-    return (
-      <div role="alert" style={{ color: "var(--error)", fontSize: "var(--text-xs)", padding: "4px 8px" }}>
-        {err}
-      </div>
-    );
-  }
-  if (patch === null) {
-    return (
-      <div style={{ color: "var(--ink-faint)", fontSize: "var(--text-xs)", padding: "4px 8px" }}>
-        loading…
-      </div>
-    );
-  }
-  if (!patch.trim()) {
-    return (
-      <div style={{ color: "var(--ink-faint)", fontSize: "var(--text-xs)", padding: "4px 8px" }}>
-        No textual diff — the file may be binary.
-      </div>
-    );
-  }
-
-  const lines = patch.split("\n");
-  return (
-    <div
-      style={{
-        fontFamily: "var(--mono)",
-        fontSize: "var(--text-xs)",
-        lineHeight: 1.5,
-        overflowX: "auto",
-        padding: "2px 0 6px",
-        userSelect: "text",
-      }}
-    >
-      {lines.map((line, i) => {
-        // Header lines carry no origin marker and are noise in a panel this
-        // narrow; the file name is already the row above.
-        if (
-          line.startsWith("diff --git") ||
-          line.startsWith("index ") ||
-          line.startsWith("--- ") ||
-          line.startsWith("+++ ") ||
-          line.startsWith("new file") ||
-          line.startsWith("deleted file")
-        ) {
-          return null;
-        }
-        const isHunk = line.startsWith("@@");
-        const added = !isHunk && line.startsWith("+");
-        const removed = !isHunk && line.startsWith("-");
-        return (
-          <div
-            key={i}
-            style={{
-              whiteSpace: "pre",
-              paddingLeft: 8,
-              color: isHunk
-                ? "var(--ink-faint)"
-                : added
-                  ? "var(--diff-add)"
-                  : removed
-                    ? "var(--error)"
-                    : "var(--ink-muted)",
-              background: added
-                ? "color-mix(in srgb, var(--diff-add) 8%, transparent)"
-                : removed
-                  ? "color-mix(in srgb, var(--error) 8%, transparent)"
-                  : undefined,
-            }}
-          >
-            {line || " "}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 /**
  * Branch and upstream position.
  *
@@ -182,7 +88,7 @@ export function ChangesPanel() {
   const workspace = useWorkspace((s) => s.workspace);
   const [changes, setChanges] = useState<WorktreeChange[]>([]);
   const [branch, setBranch] = useState<BranchState | null>(null);
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  const openDiffTab = useLayout((s) => s.openDiffTab);
   const [err, setErr] = useState<string | null>(null);
   const focus = useLayout((s) => s.changesFocus);
   const clearFocus = useLayout((s) => s.clearChangesFocus);
@@ -202,12 +108,12 @@ export function ChangesPanel() {
       .catch(() => setBranch(null));
   }, [workspace?.id]);
 
-  // Task review sends you here with one file in mind; open it on arrival.
+  // Task review sends you here with one file in mind; open its diff.
   useEffect(() => {
     if (!focus) return;
-    setOpen((prev) => new Set(prev).add(focus));
+    openDiffTab(focus);
     clearFocus();
-  }, [focus, clearFocus]);
+  }, [focus, clearFocus, openDiffTab]);
 
   useEffect(reload, [reload]);
 
@@ -279,33 +185,25 @@ export function ChangesPanel() {
       </div>
 
       {changes.map((c) => {
-        const isOpen = open.has(c.relPath);
         return (
           <div key={c.relPath}>
             <div
               className="rail-item"
               role="button"
               tabIndex={0}
-              aria-expanded={isOpen}
-              title={c.oldPath ? `${c.oldPath} → ${c.relPath}` : c.relPath}
-              onClick={() =>
-                setOpen((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(c.relPath)) next.delete(c.relPath);
-                  else next.add(c.relPath);
-                  return next;
-                })
-              }
+              title={`Open the diff for ${c.relPath}`}
+              // Opens in the centre. The diff used to expand here, in 300px of
+              // rail — wide enough to see that a line changed and not to read
+              // it.
+              onClick={() => openDiffTab(c.relPath)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  (e.currentTarget as HTMLElement).click();
+                  openDiffTab(c.relPath);
                 }
               }}
             >
-              <span className="twisty" aria-hidden>
-                {isOpen ? <ChevronDown size={12} strokeWidth={2} /> : <ChevronRight size={12} strokeWidth={2} />}
-              </span>
+              <span className="twisty" aria-hidden />
               <span
                 aria-hidden
                 style={{
@@ -333,7 +231,6 @@ export function ChangesPanel() {
                 </span>
               )}
             </div>
-            {isOpen && <Patch workspaceId={workspace.id} relPath={c.relPath} />}
           </div>
         );
       })}

@@ -32,6 +32,7 @@ import { SettingsView } from "./components/SettingsView";
 import { applyMention, mentionQueryAt } from "./chat/mentions";
 import { MentionMenu } from "./components/MentionMenu";
 import { ChangesPanel } from "./components/ChangesPanel";
+import { DiffView } from "./components/DiffView";
 import { BacklinksPanel } from "./research/BacklinksPanel";
 import { LibraryPanel } from "./research/LibraryPanel";
 import { NotesPanel } from "./research/NotesPanel";
@@ -553,6 +554,8 @@ export default function App() {
               <WelcomeView />
             ) : activeTab?.kind === "file" ? (
               <EditorPane />
+            ) : activeTab?.kind === "diff" ? (
+              <DiffView relPath={activeTab.relPath} />
             ) : activeTab?.kind === "settings" ? (
               <SettingsView />
             ) : (

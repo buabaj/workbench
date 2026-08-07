@@ -1,3 +1,4 @@
+import { GitCompare } from "lucide-react";
 import { Plus, X } from "lucide-react";
 import { ButterflyMark } from "./ButterflyMark";
 import { FileIcon } from "../icons/fileIcon";
@@ -13,14 +14,21 @@ function TabButton({ tab }: { tab: Tab }) {
   );
 
   const name =
-    tab.kind === "chat" ? "Chat" : tab.kind === "settings" ? "Settings" : tab.relPath.split("/").pop();
+    tab.kind === "chat"
+      ? "Chat"
+      : tab.kind === "settings"
+        ? "Settings"
+        : tab.relPath.split("/").pop();
+  // A diff tab and a file tab can name the same file; the label has to say
+  // which one you are looking at.
+  const label = tab.kind === "diff" ? `${name} — diff` : name;
   const closable = tab.kind !== "chat";
 
   return (
     <div
       role="tab"
       aria-selected={active}
-      aria-label={`${name}${phase === "dirty" ? ", unsaved" : ""}`}
+      aria-label={`${label}${phase === "dirty" ? ", unsaved" : ""}`}
       tabIndex={0}
       onClick={() => setActive(tab.id)}
       onKeyDown={(e) => {
@@ -54,8 +62,10 @@ function TabButton({ tab }: { tab: Tab }) {
         <ButterflyMark size={14} />
       ) : tab.kind === "file" ? (
         <FileIcon name={name ?? ""} />
+      ) : tab.kind === "diff" ? (
+        <GitCompare size={12} strokeWidth={1.8} style={{ color: "var(--clay-text)" }} />
       ) : null}
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1 }}>{name}</span>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1 }}>{label}</span>
       {phase === "dirty" && (
         <span aria-hidden style={{ color: "var(--clay-text)", fontSize: 9 }}>
           ●

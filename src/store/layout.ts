@@ -17,6 +17,9 @@ import { editorRegistry } from "../editor/editorRegistry";
 export type Tab =
   | { id: "chat"; kind: "chat" }
   | { id: string; kind: "file"; relPath: string }
+  /** A file's uncommitted change. Its own kind, not a file: it is read-only,
+   *  it is derived, and it should not be mistaken for the file itself. */
+  | { id: string; kind: "diff"; relPath: string }
   | { id: "settings"; kind: "settings" };
 
 export const CHAT_TAB: Tab = { id: "chat", kind: "chat" };
@@ -62,6 +65,7 @@ interface LayoutStore {
   mdPreview: Record<string, boolean>;
 
   openFileTab(relPath: string): void;
+  openDiffTab(relPath: string): void;
   closeTab(id: string): void;
   setActive(id: string): void;
   focusChat(): void;
@@ -101,6 +105,17 @@ export const useLayout = create<LayoutStore>((set, get) => {
     inspectorOpen: true,
     workspaceId: null,
     mdPreview: {},
+
+    openDiffTab: (relPath) => {
+      const id = `diff:${relPath}`;
+      set((s) => ({
+        tabs: s.tabs.some((t) => t.id === id)
+          ? s.tabs
+          : [...s.tabs, { id, kind: "diff", relPath }],
+        activeTabId: id,
+      }));
+      persist();
+    },
 
     openFileTab: (relPath) => {
       const id = fileTabId(relPath);
