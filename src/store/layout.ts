@@ -46,10 +46,10 @@ interface LayoutStore {
   mode: "code" | "research";
   setMode(mode: "code" | "research"): void;
   /** Which rail view is showing. In the store so other panels can switch it. */
-  railTab: "files" | "search" | "changes" | "notes" | "links";
+  railTab: "files" | "search" | "changes" | "notes" | "links" | "library";
   /** A file the Changes panel should scroll to and expand. */
   changesFocus: string | null;
-  setRailTab(tab: "files" | "search" | "changes" | "notes" | "links"): void;
+  setRailTab(tab: "files" | "search" | "changes" | "notes" | "links" | "library"): void;
   showInChanges(relPath: string): void;
   clearChangesFocus(): void;
 

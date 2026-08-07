@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod pty;
+pub mod scholar;
 pub mod search;
 pub mod anchors;
 pub mod appai;
@@ -107,6 +108,8 @@ pub fn run() {
             commands::workspace::worktree_patch,
             commands::workspace::worktree_branch,
             commands::workspace::notes_scan,
+            commands::scholar::scholar_search,
+            commands::scholar::paper_import,
             commands::workspace::file_create,
             commands::workspace::dir_create,
             commands::workspace::workspace_index,

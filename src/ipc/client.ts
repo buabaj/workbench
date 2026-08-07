@@ -20,6 +20,26 @@ export interface WorktreeChange {
   untracked: boolean;
 }
 
+export interface Paper {
+  id: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  doi: string | null;
+  venue: string | null;
+  abstractText: string | null;
+  pdfUrl: string | null;
+  landingUrl: string | null;
+  citedBy: number;
+  openAccess: boolean;
+}
+
+export interface ImportOutcome {
+  relPath: string;
+  pdfRelPath: string | null;
+  alreadyHadIt: boolean;
+}
+
 export interface NoteDoc {
   relPath: string;
   text: string;
@@ -326,6 +346,10 @@ export const ipc = {
   worktreeChanges: (workspaceId: string) =>
     invoke<WorktreeChange[]>("worktree_changes", { workspaceId }),
   notesScan: (workspaceId: string) => invoke<NoteDoc[]>("notes_scan", { workspaceId }),
+  scholarSearch: (query: string, limit?: number) =>
+    invoke<Paper[]>("scholar_search", { query, limit }),
+  paperImport: (workspaceId: string, paper: Paper) =>
+    invoke<ImportOutcome>("paper_import", { workspaceId, paper }),
   worktreeBranch: (workspaceId: string) =>
     invoke<BranchState>("worktree_branch", { workspaceId }),
   worktreePatch: (workspaceId: string, relPath: string) =>

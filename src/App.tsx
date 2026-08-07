@@ -7,6 +7,7 @@ import {
   ChevronsDownUp,
   Files,
   FilePlus,
+  Library,
   Link2,
   NotebookPen,
   FolderPlus,
@@ -32,6 +33,7 @@ import { applyMention, mentionQueryAt } from "./chat/mentions";
 import { MentionMenu } from "./components/MentionMenu";
 import { ChangesPanel } from "./components/ChangesPanel";
 import { BacklinksPanel } from "./research/BacklinksPanel";
+import { LibraryPanel } from "./research/LibraryPanel";
 import { NotesPanel } from "./research/NotesPanel";
 import { SearchPanel } from "./components/SearchPanel";
 import { SlashMenu } from "./components/SlashMenu";
@@ -58,6 +60,7 @@ const RAIL_TABS = [
  *  diffs. Search stays, because finding a passage matters more here, not less. */
 const RESEARCH_TABS = [
   { key: "notes" as const, label: "Notes", Icon: NotebookPen },
+  { key: "library" as const, label: "Find papers", Icon: Library },
   { key: "search" as const, label: "Search (⇧⌘F)", Icon: Search },
   { key: "links" as const, label: "Backlinks", Icon: Link2 },
 ];
@@ -469,7 +472,11 @@ export default function App() {
                 </div>
 
                 {sectionOpen &&
-                  (railTab === "notes" ? (
+                  (railTab === "library" ? (
+                    <div style={{ padding: "0 var(--s-2)" }}>
+                      <LibraryPanel />
+                    </div>
+                  ) : railTab === "notes" ? (
                     <div style={{ padding: "0 var(--s-2)" }}>
                       <NotesPanel />
                     </div>

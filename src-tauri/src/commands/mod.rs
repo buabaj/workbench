@@ -3,6 +3,7 @@ pub mod creds;
 pub mod links;
 pub mod profiles;
 pub mod pty;
+pub mod scholar;
 pub mod search;
 pub mod review;
 pub mod tasks;
