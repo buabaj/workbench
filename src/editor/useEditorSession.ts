@@ -85,11 +85,24 @@ export function useEditorSession(workspaceId: string, relPath: string) {
        * the change is undoable with ⌘Z like anything else you typed — an edit
        * you cannot take back is not one people will risk.
        */
-      const runDirective = async (view: EditorView) => {
+      /**
+       * Returns whether a directive was found, synchronously, so the caller
+       * knows whether to consume the keystroke. The work continues after.
+       */
+      const runDirective = (view: EditorView): boolean => {
         const text = view.state.doc.toString();
         const d = directiveAt(text, view.state.selection.main.head);
+        // No directive: leave ⌘↵ alone rather than swallowing it.
         if (!d) return false;
+        void execute(view, text, d);
+        return true;
+      };
 
+      const execute = async (
+        view: EditorView,
+        text: string,
+        d: { instruction: string; start: number; end: number },
+      ) => {
         const busy = "…thinking";
         view.dispatch({ changes: { from: d.start, to: d.end, insert: busy } });
         try {
@@ -98,24 +111,31 @@ export function useEditorSession(workspaceId: string, relPath: string) {
           if (at === -1) return true; // the document moved on; leave it alone
           view.dispatch({ changes: { from: at, to: at + busy.length, insert: out.trim() } });
         } catch (e) {
+          // The reason goes IN THE NOTE, beside the restored directive.
+          // Sending it to the console instead meant a missing key or a network
+          // error looked exactly like the keystroke doing nothing at all —
+          // which is the worst of the three things it could look like.
           const at = view.state.doc.toString().indexOf(busy, Math.max(0, d.start - 4));
           if (at !== -1) {
             view.dispatch({
-              changes: { from: at, to: at + busy.length, insert: `@agent[${d.instruction}]` },
+              changes: {
+                from: at,
+                to: at + busy.length,
+                insert: `@agent[${d.instruction}]\n\n> agent failed: ${formatError(e)}`,
+              },
             });
           }
-          // The directive is put back so nothing is lost; the reason goes to
-          // the console, since the note is not the place for an error message.
-          console.error("note action failed:", formatError(e));
         }
-        return true;
       };
 
       const saveKeymap = EditorView.domEventHandlers({
         keydown: (event, v) => {
           if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-            if (/\.(md|markdown)$/i.test(relPath)) {
-              void runDirective(view!);
+            // `v`, the view the event came from — not the closure variable,
+            // which is a different binding and null until the view is built.
+            // And preventDefault, or ⌘↵ inserts a newline as well as running.
+            if (/\.(md|markdown)$/i.test(relPath) && runDirective(v)) {
+              event.preventDefault();
               return true;
             }
           }
