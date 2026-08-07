@@ -4,6 +4,8 @@ import { useLayout } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
 import { FileIcon, FolderIcon } from "../icons/fileIcon";
 import { formatError, ipc, type TreeNode } from "../ipc/client";
+import { useComposer } from "../store/composer";
+import { FileContextMenu } from "./FileContextMenu";
 
 function parentOf(relPath: string): string {
   const i = relPath.lastIndexOf("/");
@@ -11,6 +13,7 @@ function parentOf(relPath: string): string {
 }
 
 function Row({ node, depth }: { node: TreeNode; depth: number }) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const expanded = useWorkspace((s) => s.expanded[node.relPath] ?? false);
   const active = useLayout((s) => s.activeFile() === node.relPath);
   const phase = useWorkspace((s) => s.buffers[node.relPath]?.phase);
@@ -18,6 +21,24 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
   const openFile = useWorkspace((s) => s.openFile);
   const selectDir = useWorkspace((s) => s.selectDir);
   const selectedDir = useWorkspace((s) => s.selectedDir);
+  const appendToChat = useComposer((s) => s.appendAndFocus);
+  const focusChat = useLayout((s) => s.focusChat);
+
+  // Right-click reaches the same reference the @-menu and the selection bubble
+  // produce, so a file gets into the chat the same way from anywhere.
+  const menuItems = [
+    {
+      label: "Add to chat",
+      onSelect: () => {
+        appendToChat(`@${node.relPath}`);
+        focusChat();
+      },
+    },
+    {
+      label: "Copy path",
+      onSelect: () => void navigator.clipboard.writeText(node.relPath).catch(() => {}),
+    },
+  ];
 
   const indent = { paddingLeft: `${8 + depth * 12}px` };
   const activate = () => {
@@ -52,6 +73,10 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
           tabIndex={0}
           onClick={activate}
           onKeyDown={onKeyDown}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setMenu({ x: e.clientX, y: e.clientY });
+          }}
           // Listed but de-emphasised: present when you need it (.env), never
           // competing with tracked files for attention.
           style={node.ignored ? { ...indent, opacity: 0.55 } : indent}
@@ -63,6 +88,9 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
           <span className="label">{node.name}</span>
         </div>
         {expanded && <Children subpath={node.relPath} depth={depth + 1} />}
+        {menu && (
+          <FileContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />
+        )}
       </>
     );
   }
@@ -80,6 +108,10 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
       tabIndex={0}
       onClick={activate}
       onKeyDown={onKeyDown}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY });
+      }}
     >
       <span className="twisty" aria-hidden />
       <FileIcon name={node.name} />
@@ -93,6 +125,9 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
         <span className="count" style={{ color: "var(--error)" }} aria-hidden>
           ⚠
         </span>
+      )}
+      {menu && (
+        <FileContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />
       )}
     </div>
   );

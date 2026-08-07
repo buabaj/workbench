@@ -2,7 +2,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { Columns2, Plus, Rows2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { useWorkspace } from "../store/workspace";
 
@@ -316,23 +316,25 @@ export function TerminalDock({
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 0 }}>
-        {panes.map((id) => (
-          <div
-            key={id}
-            style={{
-              // Split shows every pane at once; tabs show the active one. Both
-              // keep the others mounted, so no shell is ever restarted.
-              display: split || activeId === id ? "flex" : "none",
-              flex: 1,
-              minWidth: 0,
-              minHeight: 0,
-              // A hairline vanished against the terminal background; the same
-              // faint clay used for the dock's own rule reads as a seam.
-              borderLeft: split && panes[0] !== id ? "2px solid var(--rule-clay)" : undefined,
-            }}
-          >
-            <TerminalPane hidden={hidden || (!split && activeId !== id)} />
-          </div>
+        {panes.map((id, i) => (
+          <Fragment key={id}>
+            {/* An explicit seam, not a border: a 1px rule tinted at the dock's
+                usual faint alpha simply disappeared against the terminal
+                background, so this is its own element and its own weight. */}
+            {split && i > 0 && <div className="term-split" aria-hidden />}
+            <div
+              style={{
+                // Split shows every pane at once; tabs show the active one.
+                // Both keep the others mounted, so no shell is ever restarted.
+                display: split || activeId === id ? "flex" : "none",
+                flex: 1,
+                minWidth: 0,
+                minHeight: 0,
+              }}
+            >
+              <TerminalPane hidden={hidden || (!split && activeId !== id)} />
+            </div>
+          </Fragment>
         ))}
       </div>
     </section>

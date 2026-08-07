@@ -22,7 +22,6 @@ import { AgentOrb, PHASE_LABEL } from "./components/AgentOrb";
 import { EditorPane } from "./components/EditorPane";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FileTree } from "./components/FileTree";
-import { LinksPanel } from "./components/LinksPanel";
 import { Palette, type PaletteMode } from "./components/Palette";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { SessionsPanel } from "./components/SessionsPanel";
@@ -686,10 +685,6 @@ export default function App() {
             <section className="panel" aria-labelledby="p-review">
               <h3 id="p-review">Task review</h3>
               <ReviewPanel />
-            </section>
-            <section className="panel" aria-labelledby="p-links">
-              <h3 id="p-links">Linked evidence</h3>
-              <LinksPanel />
             </section>
           </ErrorBoundary>
         </aside>

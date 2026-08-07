@@ -70,8 +70,9 @@ const workbenchTheme = EditorView.theme(
     },
     "&.cm-focused": { outline: "none" },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--clay)", borderLeftWidth: "2px" },
+    // Its own token, not the row-tint wash: a selection has to read as one.
     "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
-      backgroundColor: "var(--clay-wash)",
+      backgroundColor: "var(--selection)",
     },
     ".cm-gutters": {
       backgroundColor: "var(--canvas)",

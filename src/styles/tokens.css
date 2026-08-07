@@ -77,6 +77,10 @@
      it strengthens on hover, where the hint becomes an affordance. */
   --rule-clay: #d9775733;
   --rule-clay-hover: #d9775780;
+  /* Selection needs far more presence than a row tint. --clay-wash at 12–15%
+     disappears against a near-black editor, which made a highlighted passage
+     unreadable as a selection in dark mode. */
+  --selection: #d977573d;
 
   /* ── functional ───────────────────────────────────────────────────────── */
   --border: #1414131a;      /* 10% ink — hairlines do the separating */
@@ -199,6 +203,8 @@
   --clay-text: #e08b6e;
   --rule-clay: #d977573d;
   --rule-clay-hover: #d977578c;
+  /* Stronger on dark: the same alpha over near-black barely registers. */
+  --selection: #d977576b;
 
   --border: #faf9f51a;
   --border-strong: #faf9f533;
@@ -253,6 +259,8 @@
     --clay-text: #e08b6e;
   --rule-clay: #d977573d;
   --rule-clay-hover: #d977578c;
+  /* Stronger on dark: the same alpha over near-black barely registers. */
+  --selection: #d977576b;
   
     --border: #faf9f51a;
     --border-strong: #faf9f533;

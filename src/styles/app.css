@@ -566,3 +566,14 @@ body {
 }
 .term-tab:hover { background: var(--raised); color: var(--ink-secondary); }
 .term-tab.on { background: var(--raised); color: var(--clay-text); }
+
+/* Seam between split terminals. Solid clay at full strength for 1px, flanked
+   by the faint wash — visible against a dark terminal without becoming a
+   stripe of colour down the middle of the dock. */
+.term-split {
+  flex: 0 0 5px;
+  align-self: stretch;
+  background: var(--rule-clay);
+  border-left: 1px solid var(--clay);
+  border-right: 1px solid var(--rule-clay-hover);
+}
