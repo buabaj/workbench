@@ -29,13 +29,15 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
       <>
         <div
           className="rail-item"
-          style={indent}
           role="treeitem"
           aria-expanded={expanded}
-          aria-label={`${node.name}, folder`}
+          aria-label={`${node.name}, folder${node.ignored ? ", git-ignored" : ""}`}
           tabIndex={0}
           onClick={activate}
           onKeyDown={onKeyDown}
+          // Listed but de-emphasised: present when you need it (.env), never
+          // competing with tracked files for attention.
+          style={node.ignored ? { ...indent, opacity: 0.55 } : indent}
         >
           <span className="twisty" aria-hidden>
             {expanded ? <ChevronDown size={12} strokeWidth={2} /> : <ChevronRight size={12} strokeWidth={2} />}
@@ -54,10 +56,10 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
   return (
     <div
       className={`rail-item ${active ? "on" : ""}`}
-      style={indent}
+      style={node.ignored ? { ...indent, opacity: 0.55 } : indent}
       role="treeitem"
       aria-selected={active}
-      aria-label={`${node.name}${stateLabel}`}
+      aria-label={`${node.name}${stateLabel}${node.ignored ? ", git-ignored" : ""}`}
       tabIndex={0}
       onClick={activate}
       onKeyDown={onKeyDown}

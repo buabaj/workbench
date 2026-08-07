@@ -1,5 +1,10 @@
 //! On-demand directory listing, .gitignore-aware. One level at a time — the
 //! frontend tree expands lazily, so a 20k-file repo never gets walked eagerly.
+//!
+//! Ignored entries are LISTED AND MARKED, not hidden. Hiding them meant `.env`
+//! vanished from the tree the moment it was gitignored — which is precisely
+//! the file you open often and commit never. Editors show ignored files
+//! dimmed for this reason; only `.git` itself is genuinely not worth showing.
 
 use std::path::Path;
 
@@ -12,6 +17,8 @@ pub struct TreeNode {
     pub rel_path: String,
     pub is_dir: bool,
     pub kind: String, // "research" | "code" | "other" | "dir"
+    /// Excluded by gitignore. Shown, but visually de-emphasised.
+    pub ignored: bool,
 }
 
 fn classify(name: &str) -> &'static str {
@@ -42,35 +49,51 @@ pub fn children(
         _ => ws.real().to_path_buf(),
     };
 
-    // One-level walk with full gitignore semantics from the workspace root.
-    let walker = ignore::WalkBuilder::new(&dir)
-        .max_depth(Some(1))
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true)
-        .require_git(false)
-        .filter_entry(|e| e.file_name() != ".git")
-        .build();
+    // Walk twice rather than reimplement gitignore matching: once honouring
+    // it, once not. The difference is exactly the ignored set, with the
+    // crate's real semantics (nested .gitignore, global excludes, negations),
+    // and at depth 1 the second walk costs nothing.
+    let visible: std::collections::HashSet<std::path::PathBuf> = walk(&dir, true)
+        .into_iter()
+        .collect();
 
     let mut nodes = Vec::new();
-    for entry in walker.flatten() {
-        let path = entry.path();
+    for path in walk(&dir, false) {
         if path == dir {
             continue;
         }
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let is_dir = entry.file_type().is_some_and(|t| t.is_dir());
-        let rel = relative_to(ws.real(), path);
+        let name = match path.file_name() {
+            Some(n) => n.to_string_lossy().into_owned(),
+            None => continue,
+        };
+        let is_dir = path.is_dir();
+        let rel = relative_to(ws.real(), &path);
         nodes.push(TreeNode {
             kind: if is_dir { "dir".into() } else { classify(&name).into() },
             name,
             rel_path: rel,
             is_dir,
+            ignored: !visible.contains(&path),
         });
     }
     nodes.sort_by(|a, b| (!a.is_dir, a.name.to_lowercase()).cmp(&(!b.is_dir, b.name.to_lowercase())));
     Ok(nodes)
+}
+
+/// One level of `dir`, optionally honouring gitignore. `.git` is never listed.
+fn walk(dir: &Path, honor_gitignore: bool) -> Vec<std::path::PathBuf> {
+    ignore::WalkBuilder::new(dir)
+        .max_depth(Some(1))
+        .hidden(false)
+        .git_ignore(honor_gitignore)
+        .git_global(honor_gitignore)
+        .git_exclude(honor_gitignore)
+        .require_git(false)
+        .filter_entry(|e| e.file_name() != ".git")
+        .build()
+        .flatten()
+        .map(|e| e.path().to_path_buf())
+        .collect()
 }
 
 fn relative_to(root: &Path, path: &Path) -> String {
@@ -101,7 +124,15 @@ mod tests {
         let names: Vec<&str> = nodes.iter().map(|n| n.name.as_str()).collect();
         assert!(names.contains(&"src"));
         assert!(names.contains(&"readme.md"));
-        assert!(!names.contains(&"node_modules"), "gitignore not honored");
+        assert!(
+            names.contains(&"node_modules"),
+            "ignored entries are listed, not hidden"
+        );
+        assert!(
+            nodes.iter().find(|n| n.name == "node_modules").unwrap().ignored,
+            "and are marked as ignored"
+        );
+        assert!(!nodes.iter().find(|n| n.name == "src").unwrap().ignored);
         assert!(!names.contains(&".git"));
         // dirs first
         assert!(nodes[0].is_dir);
@@ -113,5 +144,22 @@ mod tests {
         assert_eq!(sub.len(), 1);
         assert_eq!(sub[0].rel_path, "src/main.rs");
         assert_eq!(sub[0].kind, "code");
+    }
+
+    /// The reported case: a gitignored `.env` vanished from the tree, which is
+    /// the one file you open constantly and commit never.
+    #[test]
+    fn a_gitignored_dotfile_is_still_listed() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".gitignore"), ".env\n").unwrap();
+        std::fs::write(dir.path().join(".env"), "KEY=x").unwrap();
+
+        let ws = WorkspaceRoot::open(dir.path()).unwrap();
+        let nodes = children(&ws, None).unwrap();
+        let env = nodes
+            .iter()
+            .find(|n| n.name == ".env")
+            .expect(".env must appear in the tree");
+        assert!(env.ignored, "and must be marked ignored");
     }
 }

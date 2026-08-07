@@ -14,6 +14,8 @@ export interface TreeNode {
   name: string;
   relPath: string;
   isDir: boolean;
+  /** Excluded by gitignore — listed, but de-emphasised. */
+  ignored: boolean;
   kind: "research" | "code" | "other" | "dir";
 }
 
