@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -22,6 +22,12 @@ const devCsp = [
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   clearScreen: false,
+  // Component tests need a DOM. Pure-logic suites do not care, and jsdom is
+  // fast enough that splitting environments per file is not worth the config.
+  test: {
+    environment: "jsdom",
+    globals: false,
+  },
   server: {
     port: 1420,
     strictPort: true,

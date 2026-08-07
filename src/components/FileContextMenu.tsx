@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -25,19 +25,31 @@ export function FileContextMenu({
   items: MenuItem[];
   onClose: () => void;
 }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    // Any click, scroll, or Escape dismisses. Capture phase, so a click that
-    // lands on something else closes this first rather than after acting.
-    const onDown = () => onClose();
+    // Any click outside, scroll, or Escape dismisses.
+    //
+    // The "outside" test is load-bearing, not defensive: this listens in the
+    // capture phase, so without it a mousedown ON a menu item closed the menu
+    // and unmounted the button before the click could land — the item's
+    // onClick never ran, and "Add to chat" silently did nothing.
+    const onDown = (e: Event) => {
+      if (ref.current?.contains(e.target as Node)) return;
+      onClose();
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
+    // Scrolling always dismisses: the menu is pinned to a pointer position
+    // that stops meaning anything once the page moves under it.
+    const onScroll = () => onClose();
     window.addEventListener("mousedown", onDown, true);
-    window.addEventListener("scroll", onDown, true);
+    window.addEventListener("scroll", onScroll, true);
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("mousedown", onDown, true);
-      window.removeEventListener("scroll", onDown, true);
+      window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("keydown", onKey);
     };
   }, [onClose]);
@@ -50,6 +62,7 @@ export function FileContextMenu({
 
   return createPortal(
     <div
+      ref={ref}
       role="menu"
       style={{
         position: "fixed",

@@ -71,9 +71,20 @@ const workbenchTheme = EditorView.theme(
     "&.cm-focused": { outline: "none" },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--clay)", borderLeftWidth: "2px" },
     // Its own token, not the row-tint wash: a selection has to read as one.
-    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
-      backgroundColor: "var(--selection)",
-    },
+    //
+    // The selector shape matters as much as the colour. CodeMirror's base
+    // theme paints the focused selection through
+    //   &light.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground
+    // which is six classes deep, so a shorter rule loses exactly when the
+    // editor has focus — which is whenever anyone is selecting. Combined with
+    // `dark: false` below, that left CodeMirror's LIGHT default (#d7d4f0, pale
+    // lavender) painted behind ivory text on a dark canvas, and the selected
+    // text became unreadable. Matching the selector wins on equal specificity,
+    // because theme rules are injected after base-theme rules.
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionLayer .cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection":
+      {
+        backgroundColor: "var(--selection)",
+      },
     ".cm-gutters": {
       backgroundColor: "var(--canvas)",
       color: "var(--ink-faint)",

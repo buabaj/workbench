@@ -238,6 +238,9 @@ export function TerminalDock({
             <button
               className={`term-tab ${!split && activeId === id ? "on" : ""}`}
               aria-pressed={!split && activeId === id}
+              // Without this the name computes from the contents as
+              // "1 Close terminal 1", because the close control nests inside.
+              aria-label={`Terminal ${i + 1}`}
               onClick={() => {
                 setActiveId(id);
                 setSplit(false);
