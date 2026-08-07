@@ -597,3 +597,18 @@ body {
 }
 .mode-opt:hover { color: var(--ink-secondary); }
 .mode-opt.on { background: var(--canvas); color: var(--clay-text); }
+
+/* pdf.js text layer: real text, positioned over the canvas, all but invisible.
+   It exists so a PDF can be selected and quoted — without it a page is a
+   picture of words. Selection still has to SHOW, hence the explicit
+   ::selection: the layer's own opacity would otherwise hide the highlight. */
+.pdf-text-layer span {
+  position: absolute;
+  white-space: pre;
+  transform-origin: 0 0;
+  color: transparent;
+}
+.pdf-text-layer ::selection {
+  background: var(--clay);
+  color: transparent;
+}

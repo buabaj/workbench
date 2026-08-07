@@ -347,6 +347,9 @@ export const ipc = {
   worktreeChanges: (workspaceId: string) =>
     invoke<WorktreeChange[]>("worktree_changes", { workspaceId }),
   notesScan: (workspaceId: string) => invoke<NoteDoc[]>("notes_scan", { workspaceId }),
+  /** Run an `@agent[...]` directive written inside a note. */
+  noteAction: (workspaceId: string, instruction: string, context: string) =>
+    invoke<string>("note_action", { workspaceId, instruction, context }),
   scholarSearch: (query: string, limit?: number) =>
     invoke<Paper[]>("scholar_search", { query, limit }),
   paperImport: (workspaceId: string, paper: Paper) =>

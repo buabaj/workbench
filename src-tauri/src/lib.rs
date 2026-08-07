@@ -130,6 +130,7 @@ pub fn run() {
             commands::tasks::chat_delete_session,
             commands::tasks::agent_resume_task,
             commands::tasks::chat_title,
+            commands::tasks::note_action,
             commands::search::search_run,
             commands::search::search_replace,
             commands::pty::pty_open,

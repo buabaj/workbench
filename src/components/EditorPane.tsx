@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { frontmatterField } from "../research/frontmatter";
-import { PdfView } from "../research/PdfView";
+import { appendAnnotation } from "../research/annotations";
+import { PdfView, type PdfSelection } from "../research/PdfView";
 import { SelectionBubble } from "../editor/SelectionBubble";
 import { useEditorSession } from "../editor/useEditorSession";
 import { useLayout } from "../store/layout";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { saveBuffer, useWorkspace } from "../store/workspace";
-import { ipc } from "../ipc/client";
+import { formatError, ipc } from "../ipc/client";
 import { editorRegistry } from "../editor/editorRegistry";
 
 function ConflictBanner({ workspaceId, relPath }: { workspaceId: string; relPath: string }) {
@@ -61,6 +62,104 @@ function ConflictBanner({ workspaceId, relPath }: { workspaceId: string; relPath
   );
 }
 
+/**
+ * Write a thought about a passage into the paper's note.
+ *
+ * Reads and rewrites the file directly rather than going through the editor
+ * buffer: the note may not be the open document — you are looking at the PDF —
+ * and a write through a stale buffer would discard whatever else is in it.
+ */
+function AnnotationComposer({
+  workspaceId,
+  notePath,
+  selection,
+  onDone,
+}: {
+  workspaceId: string;
+  notePath: string;
+  selection: PdfSelection;
+  onDone: () => void;
+}) {
+  const [comment, setComment] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => ref.current?.focus(), []);
+
+  const save = async () => {
+    if (!comment.trim()) return onDone();
+    try {
+      const current = await ipc.fileRead(workspaceId, notePath);
+      const next = appendAnnotation(current.text, {
+        page: selection.page,
+        quote: selection.text,
+        comment: comment.trim(),
+      });
+      await ipc.fileWrite(workspaceId, notePath, next, current.contentHash);
+      onDone();
+    } catch (e) {
+      setErr(formatError(e));
+    }
+  };
+
+  return (
+    <div
+      style={{
+        padding: "var(--s-3)",
+        borderBottom: "1px solid var(--border)",
+        background: "var(--raised)",
+        flexShrink: 0,
+      }}
+    >
+      <div
+        style={{
+          fontSize: "var(--text-xs)",
+          color: "var(--ink-muted)",
+          marginBottom: 6,
+          maxHeight: "3.2em",
+          overflow: "hidden",
+        }}
+      >
+        p.{selection.page} — “{selection.text.replace(/\s+/g, " ").slice(0, 200)}
+        {selection.text.length > 200 ? "…" : ""}”
+      </div>
+      <textarea
+        ref={ref}
+        className="field"
+        rows={3}
+        style={{ width: "100%", fontSize: "var(--text-sm)", resize: "vertical" }}
+        placeholder="What about this passage?"
+        aria-label="Annotation"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        onKeyDown={(e) => {
+          // ⌘↵ saves; plain Enter is a newline, because this is prose.
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            void save();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onDone();
+          }
+        }}
+      />
+      {err && (
+        <div role="alert" style={{ color: "var(--error)", fontSize: "var(--text-xs)" }}>
+          {err}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        <button className="btn primary" style={{ fontSize: "var(--text-xs)" }} onClick={() => void save()}>
+          Save note ⌘↵
+        </button>
+        <button className="btn" style={{ fontSize: "var(--text-xs)" }} onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function isMd(p: string): boolean {
   const l = p.toLowerCase();
   return l.endsWith(".md") || l.endsWith(".markdown");
@@ -91,6 +190,10 @@ export function EditorPane() {
     };
   }, [workspace?.id, active]);
 
+  // An annotation is captured against the PDF but written into the NOTE, so
+  // the comment is collected here, where the note's path is known.
+  const [pendingAnnotation, setPendingAnnotation] = useState<PdfSelection | null>(null);
+
   if (!workspace || !active) return null;
   // A PDF is not text; opening one in the editor would show its raw bytes.
   if (/\.pdf$/i.test(active)) {
@@ -101,6 +204,14 @@ export function EditorPane() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {phase === "conflict" && <ConflictBanner workspaceId={workspace.id} relPath={active} />}
+      {pendingAnnotation && (
+        <AnnotationComposer
+          workspaceId={workspace.id}
+          notePath={active}
+          selection={pendingAnnotation}
+          onDone={() => setPendingAnnotation(null)}
+        />
+      )}
       {markdown && (
         <div
           style={{
@@ -161,7 +272,11 @@ export function EditorPane() {
         </div>
       )}
       {markdown && showPdf && pdfPath ? (
-        <PdfView workspaceId={workspace.id} relPath={pdfPath} />
+        <PdfView
+          workspaceId={workspace.id}
+          relPath={pdfPath}
+          onAnnotate={(sel) => setPendingAnnotation(sel)}
+        />
       ) : markdown && preview ? (
         <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
           <MarkdownPreview workspaceId={workspace.id} relPath={active} />

@@ -3,7 +3,8 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { editorRegistry } from "./editorRegistry";
 import { applyLanguage, codeExtensions, markdownExtras } from "./extensions";
-import { ipc, onFsChanged } from "../ipc/client";
+import { formatError, ipc, onFsChanged } from "../ipc/client";
+import { directiveAt } from "../research/agentDirective";
 import { useLinks } from "../store/links";
 import { saveBuffer, useWorkspace } from "../store/workspace";
 
@@ -77,8 +78,47 @@ export function useEditorSession(workspaceId: string, relPath: string) {
           );
         }
       });
+      /**
+       * ⌘↵ runs the nearest `@agent[...]` and replaces it with the answer.
+       *
+       * Through a CodeMirror transaction rather than rewriting the file, so
+       * the change is undoable with ⌘Z like anything else you typed — an edit
+       * you cannot take back is not one people will risk.
+       */
+      const runDirective = async (view: EditorView) => {
+        const text = view.state.doc.toString();
+        const d = directiveAt(text, view.state.selection.main.head);
+        if (!d) return false;
+
+        const busy = "…thinking";
+        view.dispatch({ changes: { from: d.start, to: d.end, insert: busy } });
+        try {
+          const out = await ipc.noteAction(workspaceId, d.instruction, text);
+          const at = view.state.doc.toString().indexOf(busy, Math.max(0, d.start - 4));
+          if (at === -1) return true; // the document moved on; leave it alone
+          view.dispatch({ changes: { from: at, to: at + busy.length, insert: out.trim() } });
+        } catch (e) {
+          const at = view.state.doc.toString().indexOf(busy, Math.max(0, d.start - 4));
+          if (at !== -1) {
+            view.dispatch({
+              changes: { from: at, to: at + busy.length, insert: `@agent[${d.instruction}]` },
+            });
+          }
+          // The directive is put back so nothing is lost; the reason goes to
+          // the console, since the note is not the place for an error message.
+          console.error("note action failed:", formatError(e));
+        }
+        return true;
+      };
+
       const saveKeymap = EditorView.domEventHandlers({
         keydown: (event, v) => {
+          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+            if (/\.(md|markdown)$/i.test(relPath)) {
+              void runDirective(view!);
+              return true;
+            }
+          }
           if ((event.metaKey || event.ctrlKey) && event.key === "s") {
             event.preventDefault();
             void saveBuffer(relPath, () => v.state.doc.toString());

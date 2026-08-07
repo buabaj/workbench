@@ -43,6 +43,20 @@ pub const CAPABILITIES: &[CapabilitySpec] = &[
         ],
     },
     CapabilitySpec {
+        key: "note.action",
+        display_name: "Inline note actions",
+        implemented: true,
+        required_input: &["text"],
+        required_output: &["text"],
+        // Prose written into a document, so quality matters more than for a
+        // title, and the context window has to hold a paper.
+        default_models: &[
+            "anthropic/claude-haiku-4.5",
+            "google/gemini-3.5-flash-lite",
+            "openai/gpt-4o-mini",
+        ],
+    },
+    CapabilitySpec {
         key: "transcript.cleanup",
         display_name: "Transcript cleanup",
         implemented: false,

@@ -846,3 +846,66 @@ mod title_tests {
         assert_eq!(clean_title("\"\""), "");
     }
 }
+
+
+const NOTE_ACTION_SYSTEM: &str = "You are writing directly into someone's notes. \
+Produce only the requested text — no preamble, no sign-off, no restating the request, \
+and no code fence unless the request is for code. Match the surrounding document's voice \
+and markdown conventions. If the request cannot be answered from the note, say so in one \
+short line rather than inventing content.";
+
+/// Run an `@agent[...]` directive written inside a note.
+///
+/// Answered by the internal model rather than the coding agent: this is a
+/// request/response with no session, no tools and no file access — it writes
+/// its result exactly where the directive stood and nowhere else. Handing a
+/// tool-using agent the ability to rewrite the document you are typing in is a
+/// much larger promise, and the chat is already there for that.
+#[tauri::command]
+pub async fn note_action(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    instruction: String,
+    context: String,
+) -> Result<String, AppError> {
+    if instruction.trim().is_empty() {
+        return Err(AppError::Validation("nothing was asked".into()));
+    }
+    let workspace_root: String = {
+        let conn = state.db.lock().expect("db lock");
+        conn.query_row(
+            "SELECT root_real FROM workspaces WHERE id = ?1",
+            [&workspace_id],
+            |r| r.get(0),
+        )
+        .map_err(|_| AppError::NotFound("workspace".into()))?
+    };
+
+    let key = crate::appai::dotenv::lookup(
+        "OPENROUTER_API_KEY",
+        Some(std::path::Path::new(&workspace_root)),
+    )
+    .ok_or_else(|| AppError::from(crate::appai::AppAiError::NoCredential))?;
+
+    let models: Vec<String> = crate::appai::registry::get("note.action")
+        .map(|s| s.default_models.iter().map(|m| m.to_string()).collect())
+        .unwrap_or_default();
+
+    // The note is the context; a long paper is truncated rather than refused,
+    // since the instruction usually concerns what has been written so far.
+    const MAX_CONTEXT: usize = 60_000;
+    let context: String = context.chars().take(MAX_CONTEXT).collect();
+    let user = format!("The document so far:\n\n{context}\n\n---\n\nRequest: {instruction}");
+
+    let out = crate::appai::openrouter::complete(
+        &key,
+        &models,
+        NOTE_ACTION_SYSTEM,
+        &user,
+        2_000,
+        crate::appai::openrouter::PrivacyMode::parse("balanced"),
+        90_000,
+    )
+    .await?;
+    Ok(out.trim().to_string())
+}
