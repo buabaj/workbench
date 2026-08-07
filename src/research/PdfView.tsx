@@ -207,15 +207,22 @@ function Page({
         const textHost = textRef.current;
         if (textHost) {
           textHost.replaceChildren();
+          // pdf.js positions every span with `calc(var(--total-scale-factor) *
+          // Npx)` and does NOT set that variable — the host does, as its own
+          // viewer does. Without it the spans collapse and there is nothing to
+          // select, which is exactly how this looked.
+          textHost.style.setProperty("--scale-factor", String(viewport.scale));
+          textHost.style.setProperty("--total-scale-factor", String(viewport.scale));
           const layer = new pdfjs.TextLayer({
             textContentSource: await page.getTextContent(),
             container: textHost,
             viewport,
           });
           await layer.render();
+          trace(`p${pageNumber} text layer: ${textHost.childElementCount} spans`);
         }
-      } catch {
-        /* selection unavailable on this page */
+      } catch (e) {
+        trace(`p${pageNumber} TEXT LAYER FAILED: ${e instanceof Error ? e.message : String(e)}`);
       }
     })();
 

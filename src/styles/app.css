@@ -600,15 +600,29 @@ body {
 
 /* pdf.js text layer: real text, positioned over the canvas, all but invisible.
    It exists so a PDF can be selected and quoted — without it a page is a
-   picture of words. Selection still has to SHOW, hence the explicit
-   ::selection: the layer's own opacity would otherwise hide the highlight. */
-.pdf-text-layer span {
+   picture of words.
+
+   `user-select: text` is not a nicety here. The app sets `user-select: none`
+   globally, the way a desktop app does so its chrome does not feel like a web
+   page, and that inherits straight into the PDF and makes selecting
+   impossible. Anywhere text is meant to be taken has to opt back in. */
+.pdf-text-layer {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+.pdf-text-layer span,
+.pdf-text-layer br {
   position: absolute;
   white-space: pre;
   transform-origin: 0 0;
   color: transparent;
+  user-select: text;
+  -webkit-user-select: text;
 }
+/* The highlight is painted on this layer, so it must be opaque enough to read
+   through the transparent glyphs sitting on it. */
 .pdf-text-layer ::selection {
-  background: var(--clay);
+  background: color-mix(in srgb, var(--clay) 45%, transparent);
   color: transparent;
 }
