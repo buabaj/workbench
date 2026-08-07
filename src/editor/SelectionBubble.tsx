@@ -3,6 +3,7 @@ import { MessageSquarePlus, Wand2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useComposer } from "../store/composer";
 import { useLayout } from "../store/layout";
+import { useLinks } from "../store/links";
 
 /**
  * Actions on a selection, floating beside it.
@@ -31,52 +32,61 @@ const MIN_CHARS = 1;
 export function SelectionBubble({
   viewRef,
   relPath,
-  hostRef,
+  host,
 }: {
   viewRef: React.RefObject<EditorView | null>;
   relPath: string;
-  hostRef: React.RefObject<HTMLDivElement | null>;
+  /** State, not a ref: the effect must re-run once the node actually attaches. */
+  host: HTMLDivElement | null;
 }) {
   const [pos, setPos] = useState<Pos | null>(null);
   const append = useComposer((s) => s.appendAndFocus);
   const focusChat = useLayout((s) => s.focusChat);
+  // The editor already publishes its live selection here, on every selection
+  // change, so the bubble follows it rather than guessing from raw events.
+  const selection = useLinks((s) => s.selection);
 
   useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
+    const view = viewRef.current;
+    if (!host || !view || !selection || selection.relPath !== relPath) {
+      setPos(null);
+      return;
+    }
+    if (selection.to - selection.from < MIN_CHARS) {
+      setPos(null);
+      return;
+    }
 
-    const update = () => {
-      const view = viewRef.current;
-      if (!view) return setPos(null);
-      const sel = view.state.selection.main;
-      if (sel.empty || sel.to - sel.from < MIN_CHARS) return setPos(null);
-
-      const coords = view.coordsAtPos(sel.from);
+    const place = () => {
+      const v = viewRef.current;
+      if (!v) return setPos(null);
+      const doc = v.state.doc;
+      const from = Math.min(selection.from, doc.length);
+      const to = Math.min(selection.to, doc.length);
+      const coords = v.coordsAtPos(from);
       if (!coords) return setPos(null);
       const box = host.getBoundingClientRect();
       setPos({
         // Above the first line of the selection, clamped into the pane so it
         // never floats off the top when you select from line 1.
         top: Math.max(4, coords.top - box.top - 34),
-        left: Math.min(Math.max(4, coords.left - box.left), Math.max(4, box.width - 210)),
-        fromLine: view.state.doc.lineAt(sel.from).number,
-        toLine: view.state.doc.lineAt(sel.to).number,
+        left: Math.min(Math.max(4, coords.left - box.left), Math.max(4, box.width - 220)),
+        fromLine: doc.lineAt(from).number,
+        toLine: doc.lineAt(to).number,
       });
     };
 
-    // Pointer and key events rather than a CM update listener: this only needs
-    // to run when the user finishes a gesture, not on every transaction.
-    const onUp = () => window.setTimeout(update, 0);
-    host.addEventListener("mouseup", onUp);
-    host.addEventListener("keyup", onUp);
-    const onScroll = () => setPos(null); // stale position; re-select to bring it back
+    // After layout, so coordsAtPos reflects the rendered selection.
+    const raf = requestAnimationFrame(place);
+    // A scrolled selection leaves the bubble stranded; drop it rather than
+    // chase the scroll on every frame.
+    const onScroll = () => setPos(null);
     host.addEventListener("scroll", onScroll, true);
     return () => {
-      host.removeEventListener("mouseup", onUp);
-      host.removeEventListener("keyup", onUp);
+      cancelAnimationFrame(raf);
       host.removeEventListener("scroll", onScroll, true);
     };
-  }, [hostRef, viewRef]);
+  }, [host, viewRef, relPath, selection]);
 
   if (!pos) return null;
 

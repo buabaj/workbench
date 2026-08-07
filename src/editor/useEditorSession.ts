@@ -19,6 +19,36 @@ function excerpt(text: string): string {
  * the module-level registry, so StrictMode double-mounts and tab switches
  * restore exactly (undo history, selection, scroll included).
  */
+/**
+ * Select a revealed range and scroll it into view.
+ *
+ * A line-based reveal (from search) is resolved against the document here,
+ * because only the view knows where a line starts. Everything is clamped: the
+ * file may have changed since the range was recorded, and a stale offset must
+ * land somewhere valid rather than throw.
+ */
+function applyReveal(
+  view: EditorView,
+  reveal: { from: number; to: number; line?: number },
+): void {
+  const doc = view.state.doc;
+  let from: number;
+  let to: number;
+  if (reveal.line != null) {
+    const line = doc.line(Math.min(Math.max(1, reveal.line), doc.lines));
+    from = Math.min(line.from + reveal.from, line.to);
+    to = Math.min(line.from + reveal.to, line.to);
+  } else {
+    from = Math.min(reveal.from, doc.length);
+    to = Math.min(reveal.to, doc.length);
+  }
+  view.dispatch({
+    selection: { anchor: from, head: to },
+    effects: EditorView.scrollIntoView(from, { y: "center" }),
+  });
+  view.focus();
+}
+
 export function useEditorSession(workspaceId: string, relPath: string) {
   const viewRef = useRef<EditorView | null>(null);
 
@@ -86,16 +116,7 @@ export function useEditorSession(workspaceId: string, relPath: string) {
 
         // Cross-mode navigation: a link click parked a range for this file.
         const reveal = useWorkspace.getState().consumeReveal(relPath);
-        if (reveal && view) {
-          const max = view.state.doc.length;
-          const from = Math.min(reveal.from, max);
-          const to = Math.min(reveal.to, max);
-          view.dispatch({
-            selection: { anchor: from, head: to },
-            effects: EditorView.scrollIntoView(from, { y: "center" }),
-          });
-          view.focus();
-        }
+        if (reveal && view) applyReveal(view, reveal);
       };
 
       const saved = editorRegistry.get(relPath);
@@ -133,14 +154,7 @@ export function useEditorSession(workspaceId: string, relPath: string) {
       const view = viewRef.current;
       if (!pending || pending.relPath !== relPath || !view) return;
       useWorkspace.getState().consumeReveal(relPath);
-      const max = view.state.doc.length;
-      const from = Math.min(pending.from, max);
-      const to = Math.min(pending.to, max);
-      view.dispatch({
-        selection: { anchor: from, head: to },
-        effects: EditorView.scrollIntoView(from, { y: "center" }),
-      });
-      view.focus();
+      applyReveal(view, pending);
     });
   }, [relPath]);
 

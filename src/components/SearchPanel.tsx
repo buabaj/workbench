@@ -172,6 +172,13 @@ export function SearchPanel() {
     }
   };
 
+  // Open the file AND put the cursor on the match: a result you have to hunt
+  // for once the file opens is only half an answer.
+  const reveal = (m: SearchMatch) => {
+    useWorkspace.getState().revealLine(m.relPath, m.line, m.start, m.end);
+    openFileTab(m.relPath);
+  };
+
   if (!workspace) return <div className="panel-empty">Open a workspace.</div>;
 
   return (
@@ -297,11 +304,11 @@ export function SearchPanel() {
                     role="button"
                     tabIndex={0}
                     style={{ paddingLeft: 26, fontFamily: "var(--mono)", fontSize: "var(--text-xs)" }}
-                    onClick={() => openFileTab(m.relPath)}
+                    onClick={() => reveal(m)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        openFileTab(m.relPath);
+                        reveal(m);
                       }
                     }}
                     title={`${m.relPath}:${m.line}`}

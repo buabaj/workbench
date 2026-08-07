@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useCallback, useState } from "react";
 import { SelectionBubble } from "../editor/SelectionBubble";
 import { useEditorSession } from "../editor/useEditorSession";
 import { useLayout } from "../store/layout";
@@ -130,17 +130,22 @@ function Editor({ workspaceId, relPath }: { workspaceId: string; relPath: string
   const { mount, viewRef } = useEditorSession(workspaceId, relPath);
   // Cmd+S is bound inside the editor; this button is the visible affordance.
   const phase = useWorkspace((s) => s.buffers[relPath]?.phase);
-  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  // A stable ref callback. An inline arrow is a NEW function every render, so
+  // React tears the old one down and calls this again — and `mount` builds a
+  // fresh EditorView each time it is handed a node, which rebuilt the editor
+  // mid-typing (this component re-renders whenever the buffer turns dirty).
+  const attach = useCallback(
+    (node: HTMLDivElement | null) => {
+      setHost(node);
+      mount(node);
+    },
+    [mount],
+  );
   return (
     <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
-      <div
-        ref={(node) => {
-          hostRef.current = node;
-          mount(node);
-        }}
-        style={{ height: "100%", overflow: "hidden" }}
-      />
-      <SelectionBubble viewRef={viewRef} relPath={relPath} hostRef={hostRef} />
+      <div ref={attach} style={{ height: "100%", overflow: "hidden" }} />
+      <SelectionBubble viewRef={viewRef} relPath={relPath} host={host} />
       {phase === "dirty" && (
         <button
           className="btn"

@@ -326,7 +326,9 @@ export function TerminalDock({
               flex: 1,
               minWidth: 0,
               minHeight: 0,
-              borderLeft: split && panes[0] !== id ? "1px solid var(--border)" : undefined,
+              // A hairline vanished against the terminal background; the same
+              // faint clay used for the dock's own rule reads as a seam.
+              borderLeft: split && panes[0] !== id ? "2px solid var(--rule-clay)" : undefined,
             }}
           >
             <TerminalPane hidden={hidden || (!split && activeId !== id)} />

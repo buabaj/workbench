@@ -28,7 +28,14 @@ interface WorkspaceStore {
   selectedDir: string;
   buffers: Record<string, BufferMeta>;
   /** Range an editor should scroll to and select once mounted (cross-mode nav). */
-  pendingReveal: { relPath: string; from: number; to: number } | null;
+  /**
+   * A range to select once the file is on screen.
+   *
+   * `from`/`to` are document offsets, except when `line` is set — then they are
+   * columns within that 1-indexed line, which is what a search result knows.
+   * Resolving that needs the document, so it happens in the editor.
+   */
+  pendingReveal: { relPath: string; from: number; to: number; line?: number } | null;
 
   setMode(mode: "code" | "research"): void;
   pickWorkspace(): Promise<void>;
@@ -39,7 +46,8 @@ interface WorkspaceStore {
   toggleDir(relPath: string): void;
   openFile(relPath: string): void;
   revealRange(relPath: string, from: number, to: number): void;
-  consumeReveal(relPath: string): { from: number; to: number } | null;
+  consumeReveal(relPath: string): { from: number; to: number; line?: number } | null;
+  revealLine(relPath: string, line: number, colFrom: number, colTo: number): void;
   closeFile(relPath: string): void;
   markDirty(relPath: string): void;
   markSaved(relPath: string, diskHash: string): void;
@@ -110,6 +118,9 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     useLayout.getState().openFileTab(relPath);
     set({ pendingReveal: { relPath, from, to } });
   },
+
+  revealLine: (relPath, line, colFrom, colTo) =>
+    set({ pendingReveal: { relPath, line, from: colFrom, to: colTo } }),
 
   consumeReveal: (relPath) => {
     const pending = get().pendingReveal;

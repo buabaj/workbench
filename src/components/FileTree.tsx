@@ -43,7 +43,7 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
     return (
       <>
         <div
-          className={`rail-item ${selectedDir === node.relPath ? "dir-target" : ""}`}
+          className="rail-item"
           role="treeitem"
           aria-expanded={expanded}
           aria-label={`${node.name}, folder${node.ignored ? ", git-ignored" : ""}${

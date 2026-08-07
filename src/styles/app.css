@@ -171,9 +171,6 @@ body {
   transition: background var(--dur-fast) var(--ease);
 }
 .rail-item:hover { background: var(--raised); }
-/* The folder new files will land in. A left rule rather than a fill, so it
-   does not compete with the open-file highlight. */
-.rail-item.dir-target { box-shadow: inset 2px 0 0 var(--clay); }
 .rail-item.on {
   background: var(--clay-wash);
   color: var(--ink);
