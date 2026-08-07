@@ -15,3 +15,8 @@ src-tauri/gen/schemas/
 
 # Temporary PDF render trace (see PdfView).
 .workbench-pdf-debug.log
+
+# Your research library, not source. Papers are downloaded from publishers and
+# their full text is extracted into the notes beside them — neither belongs in
+# a code repository, and republishing a paper is not ours to do.
+papers/
