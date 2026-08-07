@@ -8,7 +8,8 @@ import tailwindcss from "@tailwindcss/vite";
 const devCsp = [
   "default-src 'self'",
   "connect-src 'self' ipc: http://ipc.localhost ws://localhost:1420 http://localhost:1420",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' blob:",
+  "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self'",

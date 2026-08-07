@@ -276,6 +276,53 @@ pub fn note_for(paper: &Paper) -> String {
     out
 }
 
+/// The full-text section appended to a note once the PDF has been read.
+///
+/// Kept in the note rather than a sidecar so the paper is one thing: search
+/// finds it, the agent reads it without being told where to look, and the
+/// abstract and the text you are annotating do not drift apart.
+pub fn full_text_section(text: &str) -> String {
+    format!("\n## Full text\n\n{}\n", text.trim())
+}
+
+/// Tidy extracted PDF text into something readable.
+///
+/// Extraction produces hard-wrapped lines at whatever width the PDF was
+/// typeset to, plus page furniture. Joining wrapped lines back into paragraphs
+/// matters more than it looks: a model reading a paper line-by-line loses
+/// sentence structure, and so does a person.
+pub fn tidy_extracted(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut blank_run = 0usize;
+
+    for line in raw.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            blank_run += 1;
+            // Collapse runs of blank lines; extraction emits many.
+            if blank_run == 1 {
+                out.push_str("\n\n");
+            }
+            continue;
+        }
+        // A line that is only a number is a page number, not content.
+        if t.chars().all(|c| c.is_ascii_digit()) && t.len() <= 4 {
+            continue;
+        }
+        blank_run = 0;
+        if !out.is_empty() && !out.ends_with('\n') {
+            // A hyphen at a line break is a split word, not punctuation.
+            if out.ends_with('-') {
+                out.pop();
+            } else {
+                out.push(' ');
+            }
+        }
+        out.push_str(t);
+    }
+    out.trim().to_string()
+}
+
 /// Quote a YAML scalar only when it would otherwise be misread.
 fn yaml_scalar(s: &str) -> String {
     let needs_quotes = s.is_empty()
@@ -382,6 +429,45 @@ mod tests {
 
     /// A title with a colon is extremely common in papers and would otherwise
     /// produce YAML that parses as a nested map.
+    #[test]
+    fn tidy_rejoins_lines_wrapped_by_the_typesetter() {
+        let raw = "We propose a new\narchitecture for sequence\nmodelling.";
+        assert_eq!(
+            tidy_extracted(raw),
+            "We propose a new architecture for sequence modelling."
+        );
+    }
+
+    /// A hyphen at a line break is a split word, and joining without removing
+    /// it produces "trans-formers" throughout a paper.
+    #[test]
+    fn tidy_rejoins_a_hyphenated_split_word() {
+        assert_eq!(tidy_extracted("trans-\nformers work"), "transformers work");
+    }
+
+    #[test]
+    fn tidy_keeps_paragraph_breaks_but_collapses_runs() {
+        assert_eq!(tidy_extracted("one\n\n\n\ntwo"), "one\n\ntwo");
+    }
+
+    #[test]
+    fn tidy_drops_bare_page_numbers() {
+        assert_eq!(tidy_extracted("text here\n\n12\n\nmore text"), "text here\n\nmore text");
+    }
+
+    /// A year on its own line is content, not a page number.
+    #[test]
+    fn tidy_keeps_numbers_that_are_part_of_a_sentence() {
+        assert_eq!(tidy_extracted("published in 2017 and"), "published in 2017 and");
+    }
+
+    #[test]
+    fn full_text_section_is_a_heading_and_the_text() {
+        let s = full_text_section("  body  ");
+        assert!(s.contains("## Full text"));
+        assert!(s.contains("body"));
+    }
+
     #[test]
     fn quotes_a_title_that_would_break_yaml() {
         let mut p = paper();

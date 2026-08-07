@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { PdfView } from "../research/PdfView";
 import { SelectionBubble } from "../editor/SelectionBubble";
 import { useEditorSession } from "../editor/useEditorSession";
 import { useLayout } from "../store/layout";
@@ -72,6 +73,10 @@ export function EditorPane() {
   const togglePreview = useLayout((s) => s.toggleMdPreview);
 
   if (!workspace || !active) return null;
+  // A PDF is not text; opening one in the editor would show its raw bytes.
+  if (/\.pdf$/i.test(active)) {
+    return <PdfView workspaceId={workspace.id} relPath={active} />;
+  }
   const markdown = isMd(active);
 
   return (

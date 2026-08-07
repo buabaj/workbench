@@ -1,6 +1,8 @@
 import { FileText, FilePlus, Link2Off } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatError, ipc, onFsChanged, type NoteDoc } from "../ipc/client";
+import { FileContextMenu } from "../components/FileContextMenu";
+import { useComposer } from "../store/composer";
 import { useLayout } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
 import { noteName, unresolvedTargets } from "./wikilinks";
@@ -45,6 +47,64 @@ export function useVault() {
   }, [workspace?.id]);
 
   return { docs, err };
+}
+
+/**
+ * One note in the list.
+ *
+ * Its own component so each row can own its context menu — the same
+ * right-click actions the file tree has, because a note is exactly the kind of
+ * thing you want to hand to the agent without opening it first.
+ */
+function NoteRow({ relPath, active }: { relPath: string; active: boolean }) {
+  const openFileTab = useLayout((s) => s.openFileTab);
+  const focusChat = useLayout((s) => s.focusChat);
+  const appendToChat = useComposer((s) => s.appendAndFocus);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+
+  return (
+    <div
+      className={`rail-item ${active ? "on" : ""}`}
+      role="button"
+      tabIndex={0}
+      title={relPath}
+      onClick={() => openFileTab(relPath)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openFileTab(relPath);
+        }
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY });
+      }}
+    >
+      <span className="twisty" aria-hidden />
+      <FileText size={12} strokeWidth={1.7} style={{ flexShrink: 0, color: "var(--ink-faint)" }} />
+      <span className="label">{noteName(relPath)}</span>
+      {menu && (
+        <FileContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          items={[
+            {
+              label: "Add to chat",
+              onSelect: () => {
+                appendToChat(`@${relPath}`);
+                focusChat();
+              },
+            },
+            {
+              label: "Copy path",
+              onSelect: () => void navigator.clipboard.writeText(relPath).catch(() => {}),
+            },
+          ]}
+        />
+      )}
+    </div>
+  );
 }
 
 export function NotesPanel() {
@@ -140,24 +200,7 @@ export function NotesPanel() {
       )}
 
       {docs.map((d) => (
-        <div
-          key={d.relPath}
-          className={`rail-item ${activeFile === d.relPath ? "on" : ""}`}
-          role="button"
-          tabIndex={0}
-          title={d.relPath}
-          onClick={() => openFileTab(d.relPath)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              openFileTab(d.relPath);
-            }
-          }}
-        >
-          <span className="twisty" aria-hidden />
-          <FileText size={12} strokeWidth={1.7} style={{ flexShrink: 0, color: "var(--ink-faint)" }} />
-          <span className="label">{noteName(d.relPath)}</span>
-        </div>
+        <NoteRow key={d.relPath} relPath={d.relPath} active={activeFile === d.relPath} />
       ))}
 
       {missing.length > 0 && (

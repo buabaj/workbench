@@ -5,6 +5,7 @@ import {
   completionKeymap,
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { vaultNotePaths, wikiSource } from "./wikiComplete";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import {
   bracketMatching,
@@ -165,6 +166,14 @@ const base: Extension = [
     indentWithTab,
   ]),
   workbenchTheme,
+];
+
+/**
+ * Markdown-only extras. `[[` completion belongs to prose, not to code, where
+ * a double bracket is an array index and a popup would be an interruption.
+ */
+export const markdownExtras = [
+  markdownLanguage.data.of({ autocomplete: wikiSource(vaultNotePaths) }),
 ];
 
 export function codeExtensions(): Extension {

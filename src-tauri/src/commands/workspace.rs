@@ -294,6 +294,26 @@ pub struct NoteDoc {
     pub text: String,
 }
 
+/// Raw bytes of a workspace file, for things text cannot represent.
+///
+/// Returned as `Response` so they arrive as an ArrayBuffer rather than a JSON
+/// array of numbers — a 10MB PDF would otherwise become tens of megabytes of
+/// JSON and stall the webview parsing it.
+#[tauri::command]
+pub fn file_read_bytes(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+    path: String,
+) -> Result<tauri::ipc::Response, AppError> {
+    const MAX_BYTES: u64 = 128 * 1024 * 1024;
+    let root = root_for(&open, &workspace_id)?;
+    let p = root.resolve(&path, Intent::Read)?;
+    if std::fs::metadata(p.abs()).map(|m| m.len()).unwrap_or(0) > MAX_BYTES {
+        return Err(AppError::Validation("that file is too large to open here".into()));
+    }
+    Ok(tauri::ipc::Response::new(std::fs::read(p.abs())?))
+}
+
 /// Every markdown note in the workspace, with its text.
 ///
 /// Backlinks need the whole vault at once: you cannot know what links to a

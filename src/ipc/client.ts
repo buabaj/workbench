@@ -38,6 +38,7 @@ export interface ImportOutcome {
   relPath: string;
   pdfRelPath: string | null;
   alreadyHadIt: boolean;
+  hasFullText: boolean;
 }
 
 export interface NoteDoc {

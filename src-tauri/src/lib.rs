@@ -108,6 +108,7 @@ pub fn run() {
             commands::workspace::worktree_patch,
             commands::workspace::worktree_branch,
             commands::workspace::notes_scan,
+            commands::workspace::file_read_bytes,
             commands::scholar::scholar_search,
             commands::scholar::paper_import,
             commands::workspace::file_create,

@@ -22,6 +22,7 @@
     "codemirror": "^6.0.2",
     "lucide-react": "^1.29.0",
     "marked": "^18.0.9",
+    "pdfjs-dist": "^6.2.108",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "thinking-orbs": "^0.2.0",

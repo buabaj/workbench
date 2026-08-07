@@ -38,6 +38,8 @@ pub struct ImportOutcome {
     pub pdf_rel_path: Option<String>,
     /// True when the note already existed and was left untouched.
     pub already_had_it: bool,
+    /// Whether the paper's text was extracted, or only its abstract is there.
+    pub has_full_text: bool,
 }
 
 /// Write a paper into the vault as a literature note, with its PDF if open.
@@ -61,7 +63,12 @@ pub async fn paper_import(
 
     let note_path = root.resolve(&rel_path, Intent::Write)?;
     if note_path.abs().exists() {
-        return Ok(ImportOutcome { rel_path, pdf_rel_path: None, already_had_it: true });
+        return Ok(ImportOutcome {
+            rel_path,
+            pdf_rel_path: None,
+            already_had_it: true,
+            has_full_text: false,
+        });
     }
     if let Some(parent) = note_path.abs().parent() {
         std::fs::create_dir_all(parent)?;
@@ -71,15 +78,46 @@ pub async fn paper_import(
     // The PDF is best effort: a paper worth reading later is worth having the
     // note for now, even if the download fails or the file is paywalled.
     let mut pdf_rel_path = None;
+    let mut has_full_text = false;
     if let Some(url) = &paper.pdf_url {
         let pdf_rel = format!("{PAPERS_DIR}/pdf/{slug}.pdf");
         if let Ok(p) = root.resolve(&pdf_rel, Intent::Write) {
             if fetch_pdf(url, p.abs()).await.is_ok() {
-                pdf_rel_path = Some(pdf_rel);
+                let abs = p.abs().to_path_buf();
+                pdf_rel_path = Some(pdf_rel.clone());
+
+                // The abstract alone is not the paper. Extracting the text
+                // into the note is what makes the library answerable: search
+                // reaches it, and the agent reads it without being told where
+                // to look or being able to open a PDF at all.
+                //
+                // Blocking and slow on a long paper, so it goes to a worker.
+                let extracted =
+                    tokio::task::spawn_blocking(move || pdf_extract::extract_text(&abs))
+                        .await
+                        .ok()
+                        .and_then(|r| r.ok())
+                        .map(|t| crate::scholar::tidy_extracted(&t))
+                        .filter(|t| t.len() > 200); // a stub is worse than nothing
+
+                if let Some(text) = extracted {
+                    let mut note = std::fs::read_to_string(note_path.abs())?;
+                    note.push_str(&crate::scholar::full_text_section(&text));
+                    note = note.replace(
+                        "tags: [paper]\n",
+                        &format!("pdf: {pdf_rel}\nfull_text: true\ntags: [paper]\n"),
+                    );
+                    std::fs::write(note_path.abs(), note)?;
+                    has_full_text = true;
+                } else {
+                    let mut note = std::fs::read_to_string(note_path.abs())?;
+                    note = note.replace("tags: [paper]\n", &format!("pdf: {pdf_rel}\ntags: [paper]\n"));
+                    std::fs::write(note_path.abs(), note)?;
+                }
             }
         }
     }
-    Ok(ImportOutcome { rel_path, pdf_rel_path, already_had_it: false })
+    Ok(ImportOutcome { rel_path, pdf_rel_path, already_had_it: false, has_full_text })
 }
 
 /// Download an open-access PDF, refusing anything that is not one.

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { editorRegistry } from "./editorRegistry";
-import { applyLanguage, codeExtensions } from "./extensions";
+import { applyLanguage, codeExtensions, markdownExtras } from "./extensions";
 import { ipc, onFsChanged } from "../ipc/client";
 import { useLinks } from "../store/links";
 import { saveBuffer, useWorkspace } from "../store/workspace";
@@ -100,6 +100,9 @@ export function useEditorSession(workspaceId: string, relPath: string) {
               // files unreadable as files. Rendered output lives behind the
               // preview toggle instead.
               codeExtensions(),
+              // `[[` completion is for prose. In code a double bracket is an
+              // array index, and a popup there would be an interruption.
+              ...(/\.(md|markdown)$/i.test(relPath) ? markdownExtras : []),
               dirtyListener,
               saveKeymap,
             ],
