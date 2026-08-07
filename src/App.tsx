@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChatView, PLACEHOLDER } from "./components/ChatView";
-import { ArrowUp, Moon, PanelLeft, PanelRight, Settings, SquareTerminal, Sun } from "lucide-react";
+import { ArrowUp, Moon, PanelLeft, PanelRight, Settings, SquareTerminal, Sun, X } from "lucide-react";
 import { AgentOrb, PHASE_LABEL } from "./components/AgentOrb";
 import { EditorPane } from "./components/EditorPane";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -14,6 +14,7 @@ import { SlashMenu } from "./components/SlashMenu";
 import { TabStrip } from "./components/TabStrip";
 import { VoiceButton } from "./components/VoiceButton";
 import { formatError, ipc, onFsChanged, type AgentCommand, type WorkspaceView } from "./ipc/client";
+import { findTemplate } from "./commands/prompts";
 import { useLayout } from "./store/layout";
 import { useTheme } from "./store/theme";
 import { useChat } from "./store/chat";
@@ -63,6 +64,8 @@ export default function App() {
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
   const [commandNote, setCommandNote] = useState<string | null>(null);
+  const activeMode = useChat((s) => s.mode);
+  const activeOneShot = useChat((s) => s.oneShot);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
@@ -145,6 +148,17 @@ export default function App() {
   const slashQuery = /^\/[^\s]*$/.test(prompt) ? prompt : null;
 
   const runCommand = async (cmd: AgentCommand) => {
+    // Our own templates: a mode sticks, a command applies to the next message.
+    if (cmd.kind === "mode" || cmd.kind === "command") {
+      const t = findTemplate(cmd.name);
+      if (t) {
+        if (t.kind === "mode") useChat.getState().setMode(t);
+        else useChat.getState().setOneShot(t);
+      }
+      setPrompt("");
+      promptRef.current?.focus();
+      return;
+    }
     if (cmd.kind === "skill") {
       // Skills are interpreted by the agent, so they go into the prompt.
       setPrompt(`/${cmd.name} `);
@@ -300,6 +314,34 @@ export default function App() {
           {voiceError && (
             <div className="composer-meta" role="alert">
               <span style={{ color: "var(--error)", fontSize: "var(--text-xs)" }}>{voiceError}</span>
+            </div>
+          )}
+          {(activeMode || activeOneShot) && (
+            <div className="composer-meta">
+              {activeMode && (
+                <span className="chip mode">
+                  <b>{activeMode.name}</b> mode
+                  <button
+                    className="chip-x"
+                    aria-label="Clear mode"
+                    onClick={() => useChat.getState().setMode(null)}
+                  >
+                    <X size={10} strokeWidth={2.2} />
+                  </button>
+                </span>
+              )}
+              {activeOneShot && (
+                <span className="chip mode">
+                  <b>/{activeOneShot.name}</b> next message
+                  <button
+                    className="chip-x"
+                    aria-label="Clear command"
+                    onClick={() => useChat.getState().setOneShot(null)}
+                  >
+                    <X size={10} strokeWidth={2.2} />
+                  </button>
+                </span>
+              )}
             </div>
           )}
           {commandNote && (

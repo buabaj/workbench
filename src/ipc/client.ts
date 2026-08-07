@@ -180,7 +180,7 @@ export interface ModelInfo {
 export interface AgentCommand {
   name: string;
   description: string;
-  kind: "action" | "skill";
+  kind: "action" | "skill" | "mode" | "command";
 }
 
 export interface ChatTurnRow {

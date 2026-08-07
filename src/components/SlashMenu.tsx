@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles, Zap } from "lucide-react";
+import { Compass, Sparkles, Zap } from "lucide-react";
 import { fuzzyScore } from "../commands/registry";
 import { ipc, type AgentCommand } from "../ipc/client";
+import { TEMPLATES } from "../commands/prompts";
 import { useChat } from "../store/chat";
 
 /**
@@ -25,7 +26,18 @@ export function SlashMenu({
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    void ipc.agentCommands(taskId).then(setCommands).catch(() => setCommands([]));
+    // Our workflow templates first — they're the ones used daily. Agent skills
+    // and RPC actions follow.
+    const ours: AgentCommand[] = TEMPLATES.map((t) => ({
+      name: t.name,
+      description: t.description,
+      kind: t.kind as AgentCommand["kind"],
+    }));
+    setCommands(ours);
+    void ipc
+      .agentCommands(taskId)
+      .then((remote) => setCommands([...ours, ...remote]))
+      .catch(() => {});
   }, [taskId]);
 
   const rows = useMemo(() => {
@@ -105,7 +117,13 @@ export function SlashMenu({
           }}
         >
           <span style={{ color: "var(--ink-faint)", display: "inline-flex", marginTop: 2 }}>
-            {c.kind === "action" ? <Zap size={12} strokeWidth={1.8} /> : <Sparkles size={12} strokeWidth={1.8} />}
+            {c.kind === "action" ? (
+              <Zap size={12} strokeWidth={1.8} />
+            ) : c.kind === "skill" ? (
+              <Sparkles size={12} strokeWidth={1.8} />
+            ) : (
+              <Compass size={12} strokeWidth={1.8} />
+            )}
           </span>
           <span style={{ fontFamily: "var(--mono)", fontSize: "var(--text-sm)", color: "var(--ink)", flexShrink: 0 }}>
             /{c.name}

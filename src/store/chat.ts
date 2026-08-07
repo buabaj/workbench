@@ -1,6 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { describeMessage, extractDelta } from "../chat/normalize";
+import { composeMessage, type PromptTemplate } from "../commands/prompts";
 import {
   formatError,
   ipc,
@@ -53,7 +54,13 @@ interface ChatStore {
   phase: Phase;
   resolvedProfile: ResolvedAgentProfile | null;
   profileMissing: boolean;
+  /** Sticky stance, applied to every message until cleared. */
+  mode: PromptTemplate | null;
+  /** Applies to the next message only. */
+  oneShot: PromptTemplate | null;
 
+  setMode(t: PromptTemplate | null): void;
+  setOneShot(t: PromptTemplate | null): void;
   refreshProfile(workspaceId: string | null): Promise<void>;
   send(workspaceId: string, text: string): Promise<void>;
   stop(force: boolean): Promise<void>;
@@ -95,6 +102,11 @@ export const useChat = create<ChatStore>((set, get) => ({
   phase: "idle",
   resolvedProfile: null,
   profileMissing: false,
+  mode: null,
+  oneShot: null,
+
+  setMode: (t) => set({ mode: t }),
+  setOneShot: (t) => set({ oneShot: t }),
 
   refreshProfile: async (workspaceId) => {
     try {
@@ -105,9 +117,13 @@ export const useChat = create<ChatStore>((set, get) => ({
   },
 
   send: async (workspaceId, text) => {
-    const { taskId, status, turns } = get();
+    const { taskId, status, turns, mode, oneShot } = get();
 
-    // The user's turn appears immediately, whichever path we take below.
+    // The agent receives the composed instruction; the transcript shows what
+    // the user actually typed, so history stays readable.
+    const composed = composeMessage(text, mode, oneShot);
+    set({ oneShot: null });
+
     const userTurn: Turn = { id: nextId(), role: "user", text, tools: [], streaming: false };
     const assistantTurn: Turn = {
       id: nextId(),
@@ -124,7 +140,7 @@ export const useChat = create<ChatStore>((set, get) => ({
     if (taskId && (status === "awaiting-input" || status === "streaming")) {
       const command = status === "streaming" ? "steer" : "follow_up";
       try {
-        await ipc.agentSend(taskId, command, text);
+        await ipc.agentSend(taskId, command, composed);
         void persistAll(taskId, get().turns);
       } catch (e) {
         get().turns[get().turns.length - 1].error = formatError(e);
@@ -140,7 +156,7 @@ export const useChat = create<ChatStore>((set, get) => ({
     try {
       const view = await invoke<TaskView>("agent_start_task", {
         workspaceId,
-        prompt: text,
+        prompt: composed,
         profileOverride: null,
         channel,
       });
@@ -169,7 +185,7 @@ export const useChat = create<ChatStore>((set, get) => ({
   newConversation: async () => {
     const { taskId } = get();
     if (taskId) await ipc.agentStopTask(taskId, false).catch(() => {});
-    set({ taskId: null, turns: [], status: "idle", phase: "idle" });
+    set({ taskId: null, turns: [], status: "idle", phase: "idle", mode: null, oneShot: null });
   },
 
   deleteSession: async (taskId) => {
