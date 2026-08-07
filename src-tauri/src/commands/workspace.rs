@@ -86,7 +86,10 @@ fn open_at(
         match existing {
             Some(id) => {
                 conn.execute(
-                    "UPDATE workspaces SET last_opened_at = ?1, kind = ?2 WHERE id = ?3",
+                    // Opening a forgotten workspace un-forgets it: the list is
+                    // "where I work", and you just showed it still is.
+                    "UPDATE workspaces SET last_opened_at = ?1, kind = ?2, forgotten_at = NULL
+                       WHERE id = ?3",
                     rusqlite::params![now_ms(), kind, id],
                 )?;
                 id
@@ -151,6 +154,7 @@ pub fn workspace_recent(state: State<'_, AppState>) -> Result<Vec<WorkspaceView>
     let conn = state.db.lock().expect("db lock");
     let mut stmt = conn.prepare(
         "SELECT id, name, root_real, kind FROM workspaces
+          WHERE forgotten_at IS NULL
           ORDER BY last_opened_at DESC NULLS LAST LIMIT 10",
     )?;
     let rows = stmt
@@ -312,6 +316,22 @@ pub fn file_read_bytes(
         return Err(AppError::Validation("that file is too large to open here".into()));
     }
     Ok(tauri::ipc::Response::new(std::fs::read(p.abs())?))
+}
+
+/// Drop a workspace from the recents list, keeping everything it holds.
+///
+/// A flag rather than a delete. The row is the anchor for that project's
+/// conversations, checkpoints and links, all of which cascade — so forgetting
+/// a folder must not be a way to lose the work done in it. Opening it again
+/// brings it back.
+#[tauri::command]
+pub fn workspace_forget(state: State<'_, AppState>, workspace_id: String) -> Result<(), AppError> {
+    let conn = state.db.lock().expect("db lock");
+    conn.execute(
+        "UPDATE workspaces SET forgotten_at = ?1 WHERE id = ?2",
+        rusqlite::params![crate::db::now_ms(), workspace_id],
+    )?;
+    Ok(())
 }
 
 /// Every markdown note in the workspace, with its text.

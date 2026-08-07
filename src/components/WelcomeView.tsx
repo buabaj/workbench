@@ -1,4 +1,4 @@
-import { BookOpen, FolderOpen, Code2, Clock } from "lucide-react";
+import { BookOpen, FolderOpen, Code2, Clock, X } from "lucide-react";
 import { ButterflyMark } from "./ButterflyMark";
 import { ipc, type WorkspaceView } from "../ipc/client";
 import { useEffect, useState } from "react";
@@ -118,10 +118,10 @@ export function WelcomeView() {
             Recent
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            {recent.slice(0, 5).map((w) => (
+            {recent.slice(0, 6).map((w) => (
               <div
                 key={w.id}
-                className="rail-item"
+                className="rail-item recent-row"
                 role="button"
                 tabIndex={0}
                 title={w.rootPath}
@@ -145,12 +145,27 @@ export function WelcomeView() {
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
-                    maxWidth: "55%",
+                    maxWidth: "50%",
                     direction: "rtl",
                   }}
                 >
                   {w.rootPath}
                 </span>
+                <button
+                  className="btn icon recent-x"
+                  aria-label={`Remove ${w.name} from recent`}
+                  title="Remove from this list — nothing in the folder is touched"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Optimistic: the row is gone from a list, not from disk,
+                    // so there is nothing to be careful about undoing.
+                    setRecent((rs) => rs.filter((r) => r.id !== w.id));
+                    void ipc.workspaceForget(w.id).catch(() => {});
+                  }}
+                  style={{ padding: 2, flexShrink: 0, color: "var(--ink-faint)" }}
+                >
+                  <X size={11} strokeWidth={2} />
+                </button>
               </div>
             ))}
           </div>

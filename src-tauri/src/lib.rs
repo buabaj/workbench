@@ -100,6 +100,7 @@ pub fn run() {
             commands::workspace::workspace_open,
             commands::workspace::workspace_pick,
             commands::workspace::workspace_recent,
+            commands::workspace::workspace_forget,
             commands::workspace::workspace_tree,
             commands::workspace::file_read,
             commands::workspace::file_stat,

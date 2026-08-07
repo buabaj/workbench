@@ -663,3 +663,9 @@ body {
   user-select: text;
   z-index: 5;
 }
+
+/* The remove control on a recent workspace stays out of the way until the row
+   is hovered: it is a rarely-wanted action sitting on a frequently-wanted one. */
+.recent-row .recent-x { opacity: 0; transition: opacity var(--motion-fast, 120ms) ease; }
+.recent-row:hover .recent-x,
+.recent-row:focus-within .recent-x { opacity: 1; }

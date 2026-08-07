@@ -367,6 +367,9 @@ export const ipc = {
     invoke<AgentModel[]>("agent_list_models", { credentialProfileId }),
   agentProfileSetModel: (credentialProfileId: string, modelId: string) =>
     invoke<void>("agent_profile_set_model", { credentialProfileId, modelId }),
+  /** Drop a workspace from recents. Keeps its conversations and checkpoints. */
+  workspaceForget: (workspaceId: string) =>
+    invoke<void>("workspace_forget", { workspaceId }),
   workspaceIndex: (workspaceId: string, refresh: boolean) =>
     invoke<string[]>("workspace_index", { workspaceId, refresh }),
   workspaceSettingGet: (workspaceId: string, key: string) =>

@@ -13,6 +13,42 @@ import { backlinksTo, noteName, parseWikiLinks, resolveLink } from "./wikilinks"
  * the note itself. Each is shown with the line it sits on, because a filename
  * alone does not tell you why the link was made.
  */
+/**
+ * What this panel is for, shown where the answer is otherwise absent.
+ *
+ * Backlinks are unfamiliar to anyone who has not used a note vault, and an
+ * empty list looks broken rather than empty. Explaining costs nothing here
+ * and is the difference between a feature and a mystery.
+ */
+function Explainer({ heading }: { heading: string }) {
+  const mono = { fontFamily: "var(--mono)", color: "var(--clay-text)" };
+  return (
+    <div
+      style={{
+        fontSize: "var(--text-xs)",
+        color: "var(--ink-muted)",
+        lineHeight: 1.6,
+        padding: "var(--s-2)",
+      }}
+    >
+      <div style={{ color: "var(--ink-secondary)", marginBottom: "var(--s-2)" }}>{heading}</div>
+      <p style={{ margin: "0 0 var(--s-2)" }}>
+        Write <span style={mono}>[[Note name]]</span> in any note to link to another. Typing{" "}
+        <span style={mono}>[[</span> offers the ones you have, and a name you have not written
+        yet still works — it appears under Notes, waiting to be created.
+      </p>
+      <p style={{ margin: "0 0 var(--s-2)" }}>
+        This panel then shows both directions for whichever note is open: the notes that link{" "}
+        <b>to</b> it, each with the sentence the link sits in, and the notes it links{" "}
+        <b>out</b> to.
+      </p>
+      <p style={{ margin: 0, color: "var(--ink-faint)" }}>
+        It reads saved files, so a link you have just typed appears after ⌘S.
+      </p>
+    </div>
+  );
+}
+
 export function BacklinksPanel() {
   const workspace = useWorkspace((s) => s.workspace);
   const active = useLayout((s) => s.activeFile());
@@ -36,11 +72,13 @@ export function BacklinksPanel() {
   }, [active, docs, paths]);
 
   if (!workspace) return <div className="panel-empty">Open a workspace.</div>;
-  if (!active) return <div className="panel-empty">Open a note to see what links to it.</div>;
+  // An empty panel that says only "nothing here" teaches nothing. This one is
+  // most people's first encounter with the idea, so it explains it.
+  if (!active) return <Explainer heading="Open a note to see its links." />;
 
   const empty = incoming.length === 0 && outgoing.length === 0;
   if (empty) {
-    return <div className="panel-empty">Nothing links here yet, and this note links nowhere.</div>;
+    return <Explainer heading={`Nothing links to ${noteName(active)} yet.`} />;
   }
 
   return (
