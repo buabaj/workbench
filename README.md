@@ -53,7 +53,7 @@ prime-agent --version
 ## Build and install
 
 ```bash
-git clone git@github.com:buabaj/workbench.git
+git clone https://github.com/buabaj/workbench.git
 cd workbench
 npm install
 npm run ship
