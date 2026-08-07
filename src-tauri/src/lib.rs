@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod pty;
 pub mod anchors;
 pub mod appai;
 pub mod commands;
@@ -22,6 +23,8 @@ pub struct AppState {
     pub db: Arc<Mutex<rusqlite::Connection>>,
     pub keychain: Arc<dyn Keychain>,
     pub supervisor: Arc<Supervisor>,
+    /// User-owned shells. Separate from the agent's bash tool by design.
+    pub ptys: Arc<crate::pty::PtyRegistry>,
 }
 
 #[derive(serde::Serialize)]
@@ -73,6 +76,7 @@ pub fn run() {
                 db: Arc::new(Mutex::new(conn)),
                 keychain: Arc::new(creds::keychain::MacKeychain),
                 supervisor: Arc::new(Supervisor::default()),
+                ptys: Arc::new(crate::pty::PtyRegistry::default()),
             });
             Ok(())
         })
@@ -115,6 +119,10 @@ pub fn run() {
             commands::tasks::chat_delete_session,
             commands::tasks::agent_resume_task,
             commands::tasks::chat_title,
+            commands::pty::pty_open,
+            commands::pty::pty_write,
+            commands::pty::pty_resize,
+            commands::pty::pty_close,
             commands::tasks::agent_commands,
             commands::tasks::agent_action,
             commands::review::review_task_diff,
@@ -147,6 +155,8 @@ pub fn run() {
                     state
                         .supervisor
                         .shutdown_all(std::time::Duration::from_secs(6));
+                    // No shell outlives the window it was opened in.
+                    state.ptys.close_all();
                 }
                 // Drops every session, unlinking any in-flight recording.
                 if let Some(voice) = app.try_state::<voice::session::VoiceState>() {

@@ -13,6 +13,7 @@ import { SettingsView } from "./components/SettingsView";
 import { applyMention, mentionQueryAt } from "./chat/mentions";
 import { MentionMenu } from "./components/MentionMenu";
 import { SlashMenu } from "./components/SlashMenu";
+import { TerminalDock } from "./terminal/TerminalDock";
 import { TabStrip } from "./components/TabStrip";
 import { VoiceButton } from "./components/VoiceButton";
 import { formatError, ipc, onFsChanged, type AgentCommand, type WorkspaceView } from "./ipc/client";
@@ -66,10 +67,35 @@ export default function App() {
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
   const [commandNote, setCommandNote] = useState<string | null>(null);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalHeight, setTerminalHeight] = useState(260);
   const activeMode = useChat((s) => s.mode);
   const activeOneShot = useChat((s) => s.oneShot);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
+
+  /** Keep the dock usable: never taller than most of the window, never a sliver. */
+  const clampTerminal = (h: number) =>
+    Math.max(120, Math.min(h, Math.round(window.innerHeight * 0.75)));
+
+  // Pointer capture rather than window listeners: the drag keeps working when
+  // the pointer crosses the terminal, which swallows events of its own.
+  const startTerminalDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const startY = e.clientY;
+    const startH = terminalHeight;
+    const onMove = (ev: PointerEvent) =>
+      setTerminalHeight(clampTerminal(startH + (startY - ev.clientY)));
+    const onUp = (ev: PointerEvent) => {
+      handle.releasePointerCapture(ev.pointerId);
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+  };
 
   useEffect(() => {
     initTheme();
@@ -98,6 +124,11 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.metaKey && e.key === "`") {
+        e.preventDefault();
+        setTerminalOpen((v) => !v);
+        return;
+      }
       if (!(e.metaKey || e.ctrlKey)) return;
       const k = e.key.toLowerCase();
       if (k === "p") {
@@ -244,11 +275,12 @@ export default function App() {
           <PanelRight size={15} strokeWidth={1.6} />
         </button>
         <button
-          className="btn icon"
-          onClick={() => {}}
+          className={`btn icon ${terminalOpen ? "on" : ""}`}
+          onClick={() => setTerminalOpen((v) => !v)}
           aria-label="Toggle terminal"
-          title="Terminal — arriving in the next pass"
-          disabled
+          aria-pressed={terminalOpen}
+          title="Terminal (⌃`)"
+          disabled={!workspace}
         >
           <SquareTerminal size={15} strokeWidth={1.6} />
         </button>
@@ -334,6 +366,36 @@ export default function App() {
             )}
           </ErrorBoundary>
         </main>
+
+        {terminalOpen && workspace && (
+          <>
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize terminal"
+              tabIndex={0}
+              onPointerDown={startTerminalDrag}
+              onKeyDown={(e) => {
+                // Keyboard-resizable too: a drag-only handle is unreachable.
+                if (e.key === "ArrowUp") setTerminalHeight((h) => clampTerminal(h + 24));
+                else if (e.key === "ArrowDown") setTerminalHeight((h) => clampTerminal(h - 24));
+                else return;
+                e.preventDefault();
+              }}
+              style={{
+                height: 5,
+                flexShrink: 0,
+                cursor: "row-resize",
+                background: "var(--border)",
+              }}
+            />
+            <div style={{ height: terminalHeight, flexShrink: 0, minHeight: 0 }}>
+              <ErrorBoundary>
+                <TerminalDock onClose={() => setTerminalOpen(false)} />
+              </ErrorBoundary>
+            </div>
+          </>
+        )}
 
         <footer className="composer">
           {voiceError && (
