@@ -829,3 +829,69 @@ body {
   scrollbar-width: none;
 }
 .tab-scroll::-webkit-scrollbar { display: none; }
+
+/* ── find in file ─────────────────────────────────────────────────────────
+   Floats over the document at the top right, where it covers the least of
+   what you are reading: text runs from the left, so a bar pinned right hides
+   ends of lines rather than beginnings. */
+.find-bar {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 5px;
+  background: var(--canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-panel);
+  box-shadow: var(--lift-strong);
+}
+.find-input {
+  width: 190px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 3px 6px;
+  outline: none;
+}
+.find-input::placeholder { color: var(--ink-faint); }
+.find-toggles { display: flex; gap: 1px; }
+.find-toggle {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-faint);
+  border-radius: var(--r-control);
+  padding: 2px 4px;
+  cursor: default;
+  display: inline-flex;
+  transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.find-toggle:hover { color: var(--ink); background: var(--raised); }
+/* On is a state, not a hover: it stays lit when the pointer leaves, or you
+   cannot tell whether the last search was case-sensitive. */
+.find-toggle.on {
+  color: var(--clay-text);
+  background: var(--clay-wash);
+  border-color: var(--clay);
+}
+.find-count {
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  /* Reserved, so stepping from 9 to 10 does not shove the buttons sideways
+     under the cursor mid-click. */
+  min-width: 74px;
+  text-align: right;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.find-bar .btn.icon.find-step {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  justify-content: center;
+}

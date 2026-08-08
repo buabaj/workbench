@@ -57,6 +57,11 @@ interface LayoutStore {
   setRailTab(tab: "files" | "search" | "changes" | "notes" | "links" | "library"): void;
   showInChanges(relPath: string): void;
   clearChangesFocus(): void;
+  /** A query handed to the workspace search, from ⌘F or from anywhere else
+   *  that already knows what you are looking for. */
+  searchSeed: string | null;
+  openSearch(pattern: string): void;
+  clearSearchSeed(): void;
 
   tabs: Tab[];
   activeTabId: string;
@@ -207,6 +212,13 @@ export const useLayout = create<LayoutStore>((set, get) => {
     showInChanges: (relPath) =>
       set({ railTab: "changes", changesFocus: relPath, railOpen: true }),
     clearChangesFocus: () => set({ changesFocus: null }),
+
+    searchSeed: null,
+    // Widening a search you have already composed is the commonest next move
+    // after finding nothing in this file; retyping it is the tax.
+    openSearch: (pattern) =>
+      set({ railTab: "search", railOpen: true, searchSeed: pattern || null }),
+    clearSearchSeed: () => set({ searchSeed: null }),
 
     // Clamped on the way in, so a persisted width from a bigger display cannot
     // leave a panel wider than the window it is opened on.

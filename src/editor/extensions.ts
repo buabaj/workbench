@@ -5,6 +5,7 @@ import {
   completionKeymap,
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { search } from "@codemirror/search";
 import { vaultNotePaths, wikiSource } from "./wikiComplete";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import {
@@ -177,7 +178,16 @@ export const markdownExtras = [
 ];
 
 export function codeExtensions(): Extension {
-  return [base, lineNumbers(), highlightActiveLineGutter(), languageCompartment.of([])];
+  return [
+    base,
+    lineNumbers(),
+    highlightActiveLineGutter(),
+    // For its state and commands only. `openSearchPanel` is never called —
+    // CodeMirror's own panel knows nothing about this app's type or spacing,
+    // so the bar is ours and the matching is theirs.
+    search(),
+    languageCompartment.of([]),
+  ];
 }
 
 export function proseExtensions(): Extension {

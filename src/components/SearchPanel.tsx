@@ -79,6 +79,16 @@ export function SearchPanel() {
   const openFileTab = useLayout((s) => s.openFileTab);
 
   const [pattern, setPattern] = useState("");
+  const seed = useLayout((s) => s.searchSeed);
+  const clearSeed = useLayout((s) => s.clearSearchSeed);
+
+  // A query arriving from ⌘F. Consumed immediately, so returning to the panel
+  // later does not re-seed it over whatever you have since typed.
+  useEffect(() => {
+    if (seed === null) return;
+    setPattern(seed);
+    clearSeed();
+  }, [seed, clearSeed]);
   const [replacement, setReplacement] = useState("");
   const [showReplace, setShowReplace] = useState(false);
   const [caseSensitive, setCaseSensitive] = useState(false);
