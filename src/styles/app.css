@@ -79,8 +79,8 @@ body {
   grid-area: rail;
   min-height: 0;
   /* Width is set inline from the layout store — the token is the default the
-     store starts from, and the drag handle owns it thereafter. */
-  border-right: 1px solid var(--border);
+     store starts from, and the drag handle owns it thereafter. The seam is the
+     grip's, not ours: both would be two pixels of line. */
   padding: var(--s-3) 0;
   overflow-y: auto;
   background: var(--surface);
@@ -227,7 +227,6 @@ body {
 .inspector {
   grid-area: inspector;
   min-height: 0;
-  border-left: 1px solid var(--border);
   overflow-y: auto;
   padding: var(--s-4);
   display: flex;
@@ -583,15 +582,42 @@ body {
 .md th { background: var(--surface); font-weight: 600; }
 .md img { max-width: 100%; border-radius: var(--r-card); }
 
-/* Divider that is also a drag handle. Faint clay so the seam is visible
-   without reading as a coloured stripe; brighter on hover and focus, where
-   the hint needs to become an affordance. */
+/* Divider that is also a drag handle.
+   The handle is wide enough to grab and the SEAM is one pixel: painting the
+   whole 5px target made a coloured stripe down the middle of the app. The line
+   is drawn by a pseudo-element so the two sizes stay independent — a bigger
+   target never means a heavier line. */
 .rule-drag {
-  background: var(--rule-clay);
-  transition: background var(--motion-fast, 120ms) ease;
+  background: transparent;
+  position: relative;
 }
-.rule-drag:hover,
-.rule-drag:focus-visible {
+.rule-drag::after {
+  content: "";
+  position: absolute;
+  background: var(--border);
+  transition: background var(--dur-fast) var(--ease);
+}
+/* Vertical seams: rail and inspector. */
+.rail-grip::after,
+.inspector-grip::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+/* Horizontal seam: the terminal. */
+.rule-drag[aria-orientation="horizontal"]::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+/* Quiet until wanted: clay on hover and focus, where the hint has to become
+   an affordance. */
+.rule-drag:hover::after,
+.rule-drag:focus-visible::after {
   background: var(--rule-clay-hover);
 }
 
