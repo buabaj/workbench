@@ -96,6 +96,17 @@ export interface PickedFile {
   size: number;
 }
 
+export interface RejectedFile {
+  path: string;
+  reason: string;
+}
+
+/** Both halves of a pick or a drop: one bad path must not lose the good ones. */
+export interface DescribeResult {
+  files: PickedFile[];
+  rejected: RejectedFile[];
+}
+
 export interface AttachmentBytes {
   /** Raw base64, no `data:` prefix — the shape the agent's RPC takes. */
   base64: string;
@@ -434,10 +445,10 @@ export const ipc = {
   worktreeBranch: (workspaceId: string) =>
     invoke<BranchState>("worktree_branch", { workspaceId }),
   /** Native multi-select file picker. An empty list means cancelled. */
-  attachmentPick: () => invoke<PickedFile[]>("attachment_pick"),
+  attachmentPick: () => invoke<DescribeResult>("attachment_pick"),
   /** Name and size for dropped paths; rejects a folder rather than guessing. */
   attachmentDescribe: (paths: string[]) =>
-    invoke<PickedFile[]>("attachment_describe", { paths }),
+    invoke<DescribeResult>("attachment_describe", { paths }),
   /** Image bytes, typed from the file's own header rather than its extension. */
   attachmentRead: (path: string) => invoke<AttachmentBytes>("attachment_read", { path }),
   worktreeBranches: (workspaceId: string) =>

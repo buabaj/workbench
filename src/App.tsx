@@ -348,27 +348,36 @@ export default function App() {
   // events never fire. It is also the better source — this gives real
   // filesystem paths, and a path is what the agent is handed either way. An
   // HTML5 `File` has no path at all.
+  //
+  // Switched exhaustively on purpose. `enter` carries `paths` just as `drop`
+  // does, so a handler that treats "not over, not leave" as a drop attaches
+  // the file the moment the pointer crosses the window — before you have let
+  // go, and with no way to change your mind.
   useEffect(() => {
     const un = getCurrentWebview().onDragDropEvent((event) => {
-      if (event.payload.type === "over") {
-        setDropping(true);
-        return;
+      switch (event.payload.type) {
+        case "enter":
+        case "over":
+          setDropping(true);
+          return;
+        case "leave":
+          setDropping(false);
+          return;
+        case "drop": {
+          setDropping(false);
+          const paths = event.payload.paths;
+          if (!paths?.length) return;
+          // Sizes and folder-rejection come from Rust; a drop is only paths.
+          void ipc
+            .attachmentDescribe(paths)
+            .then((out) => {
+              attach(out.files, out.rejected);
+              focusChat();
+            })
+            .catch((e) => setCommandNote(formatError(e)));
+          return;
+        }
       }
-      if (event.payload.type === "leave") {
-        setDropping(false);
-        return;
-      }
-      setDropping(false);
-      const paths = event.payload.paths;
-      if (!paths?.length) return;
-      // Sizes and folder-rejection come from Rust; a drop is only paths.
-      void ipc
-        .attachmentDescribe(paths)
-        .then((files) => {
-          attach(files);
-          focusChat();
-        })
-        .catch((e) => setCommandNote(formatError(e)));
     });
     return () => {
       void un.then((f) => f());
@@ -388,7 +397,9 @@ export default function App() {
   const pickAttachments = async () => {
     try {
       const picked = await ipc.attachmentPick();
-      if (picked.length > 0) attach(picked);
+      if (picked.files.length > 0 || picked.rejected.length > 0) {
+        attach(picked.files, picked.rejected);
+      }
     } catch (e) {
       setCommandNote(formatError(e));
     }

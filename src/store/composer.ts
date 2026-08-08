@@ -29,7 +29,10 @@ interface ComposerStore {
   focus(): void;
   clear(): void;
 
-  attach(files: Array<{ path: string; size: number }>): void;
+  attach(
+    files: Array<{ path: string; size: number }>,
+    rejected?: Array<{ path: string; reason: string }>,
+  ): void;
   detach(path: string): void;
   dismissRejected(): void;
 }
@@ -55,13 +58,16 @@ export const useComposer = create<ComposerStore>((set, get) => ({
   // Sending clears both: the message went, and so did everything on it.
   clear: () => set({ text: "", attachments: [], rejected: [] }),
 
-  attach: (files) => {
+  attach: (files, alreadyRejected = []) => {
     const { attachments, rejected } = addAll(get().attachments, files);
     set({
       attachments,
-      // Kept until dismissed or the next successful attach — a file that
-      // vanishes on drop reads as a broken drop target.
-      rejected: rejected.map((r) => `${r.path.split("/").pop()}: ${r.reason}`),
+      // Kept until dismissed — a file that vanishes on drop reads as a broken
+      // drop target. Rejections from the backend (a folder, a missing file)
+      // are shown alongside the ones found here (too big, too many).
+      rejected: [...alreadyRejected, ...rejected].map(
+        (r) => `${r.path.split("/").pop()}: ${r.reason}`,
+      ),
       focusTick: get().focusTick + 1,
     });
   },

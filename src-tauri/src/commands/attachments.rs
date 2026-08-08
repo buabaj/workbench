@@ -21,24 +21,65 @@ pub struct PickedFile {
     pub size: u64,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RejectedFile {
+    pub path: String,
+    pub reason: String,
+}
+
+/// What a drop or a pick yielded, partitioned.
+///
+/// Both halves, deliberately. Dropping three files and a folder used to fail
+/// the whole batch on the folder — one thing you did not mean taking down three
+/// you did. Each path stands or falls alone, and the ones that fall say why.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DescribeResult {
+    pub files: Vec<PickedFile>,
+    pub rejected: Vec<RejectedFile>,
+}
+
+fn partition(paths: impl Iterator<Item = PathBuf>) -> DescribeResult {
+    let mut files = Vec::new();
+    let mut rejected = Vec::new();
+    for path in paths {
+        match describe(&path) {
+            Ok(f) => files.push(f),
+            Err(e) => rejected.push(RejectedFile {
+                path: path.to_string_lossy().to_string(),
+                reason: reason_of(&e),
+            }),
+        }
+    }
+    DescribeResult { files, rejected }
+}
+
+/// The message alone. The pill has room for "is a folder", not for a wrapped
+/// error type's Debug output.
+fn reason_of(e: &AppError) -> String {
+    match e {
+        AppError::Validation(m) | AppError::Io(m) => m.clone(),
+        other => other.to_string(),
+    }
+}
+
 /// Native file picker, multi-select.
 ///
 /// `async` deliberately: `blocking_pick_files` must not run on the main thread,
 /// and an async command is handed to a worker. `workspace_pick` does the same
 /// for the same reason.
 #[tauri::command]
-pub async fn attachment_pick(app: tauri::AppHandle) -> Result<Vec<PickedFile>, AppError> {
+pub async fn attachment_pick(app: tauri::AppHandle) -> Result<DescribeResult, AppError> {
     use tauri_plugin_dialog::DialogExt;
     let picked = app.dialog().file().blocking_pick_files();
     let Some(files) = picked else {
-        return Ok(vec![]); // cancelled, which is not a failure
+        // Cancelled, which is not a failure.
+        return Ok(DescribeResult { files: vec![], rejected: vec![] });
     };
-    let mut out = Vec::new();
-    for f in files {
-        let path = f.into_path().map_err(|e| AppError::Io(e.to_string()))?;
-        out.push(describe(&path)?);
-    }
-    Ok(out)
+    Ok(partition(
+        files.into_iter().filter_map(|f| f.into_path().ok()),
+    ))
 }
 
 /// Size and name for a dropped path.
@@ -47,8 +88,8 @@ pub async fn attachment_pick(app: tauri::AppHandle) -> Result<Vec<PickedFile>, A
 /// returns have to be gathered here too. A directory is refused: attaching one
 /// means something ("all of it"? "recursively"?) that nothing downstream honours.
 #[tauri::command]
-pub fn attachment_describe(paths: Vec<String>) -> Result<Vec<PickedFile>, AppError> {
-    paths.iter().map(|p| describe(Path::new(p))).collect()
+pub fn attachment_describe(paths: Vec<String>) -> DescribeResult {
+    partition(paths.into_iter().map(PathBuf::from))
 }
 
 fn describe(path: &Path) -> Result<PickedFile, AppError> {
@@ -221,5 +262,33 @@ mod tests {
     #[test]
     fn a_missing_file_is_an_error_not_an_empty_attachment() {
         assert!(describe(Path::new("/nope/does-not-exist.png")).is_err());
+    }
+
+    #[test]
+    fn one_bad_path_does_not_take_the_good_ones_with_it() {
+        // Dropping files together with a folder used to lose the whole batch.
+        let dir = tempfile::tempdir().unwrap();
+        let good = dir.path().join("a.log");
+        std::fs::write(&good, b"x").unwrap();
+        let folder = dir.path().join("sub");
+        std::fs::create_dir(&folder).unwrap();
+
+        let out = attachment_describe(vec![
+            good.to_string_lossy().to_string(),
+            folder.to_string_lossy().to_string(),
+            "/nope/missing.png".to_string(),
+        ]);
+        assert_eq!(out.files.len(), 1);
+        assert_eq!(out.files[0].name, "a.log");
+        assert_eq!(out.rejected.len(), 2);
+        assert!(out.rejected[0].reason.contains("folder"), "{:?}", out.rejected);
+    }
+
+    #[test]
+    fn a_rejection_carries_a_reason_worth_showing() {
+        // "Io(\"...\")" in a pill helps nobody.
+        let out = attachment_describe(vec!["/nope/missing.png".into()]);
+        assert_eq!(out.rejected.len(), 1);
+        assert!(!out.rejected[0].reason.contains("Io("), "{:?}", out.rejected);
     }
 }
