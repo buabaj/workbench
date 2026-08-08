@@ -653,13 +653,7 @@ export default function App() {
           </ErrorBoundary>
         </main>
 
-        <footer
-        className="composer"
-        // Not a drop handler — Tauri owns the drop. This only shows that the
-        // window will take it, which is the whole of what a drop target has to
-        // communicate before you let go.
-        style={dropping ? { outline: "1px solid var(--clay-text)", outlineOffset: -1 } : undefined}
-      >
+        <footer className="composer">
           {voiceError && (
             <div className="composer-meta" role="alert">
               <span style={{ color: "var(--error)", fontSize: "var(--text-xs)" }}>{voiceError}</span>
@@ -700,7 +694,14 @@ export default function App() {
               <span style={{ color: "var(--ink-muted)", fontSize: "var(--text-xs)" }}>{commandNote}</span>
             </div>
           )}
-          <div className="composer-row" style={{ position: "relative" }}>
+          {/* Not a drop handler — Tauri owns the drop. The ring only says the
+              window will take it, which is all a drop target has to
+              communicate before you let go. On the box rather than the footer,
+              because the box is where the file will end up. */}
+          <div
+            className="composer-box"
+            style={dropping ? { borderColor: "var(--clay)", background: "var(--clay-wash)" } : undefined}
+          >
             {slashQuery && (
               <SlashMenu
                 query={slashQuery}
@@ -736,32 +737,37 @@ export default function App() {
                 }
               }}
             />
-            <button
-              className="btn icon"
-              disabled={!workspace}
-              onClick={() => void pickAttachments()}
-              aria-label="Add files to this message"
-              title="Add files — or drop them anywhere"
-            >
-              <Plus size={16} strokeWidth={1.8} />
-            </button>
-            <VoiceButton
-              phase={voicePhase}
-              elapsedMs={voiceElapsed}
-              levels={voiceLevels}
-              configured={Boolean(voiceCapability?.configured)}
-              onToggle={() => void toggleVoice(insertTranscript)}
-              onCancel={() => void cancelVoice()}
-            />
-            <button
-              className="btn primary send"
-              disabled={!canRun}
-              onClick={submit}
-              aria-label={busy ? "Add to queue" : "Send"}
-              title={busy ? "Queue it — starts when this turn finishes (↵)" : "Send (↵)"}
-            >
-              {busy ? <AgentOrb phase="thinking" /> : <ArrowUp size={16} strokeWidth={2} />}
-            </button>
+            <div className="composer-actions">
+              {/* Adds to the message, so it sits at the start of it. */}
+              <button
+                className="btn icon"
+                disabled={!workspace}
+                onClick={() => void pickAttachments()}
+                aria-label="Add files to this message"
+                title="Add files — or drop them anywhere"
+              >
+                <Plus size={16} strokeWidth={1.8} />
+              </button>
+              <span className="spacer" />
+              {/* Both act on what you have written, so both sit at the end. */}
+              <VoiceButton
+                phase={voicePhase}
+                elapsedMs={voiceElapsed}
+                levels={voiceLevels}
+                configured={Boolean(voiceCapability?.configured)}
+                onToggle={() => void toggleVoice(insertTranscript)}
+                onCancel={() => void cancelVoice()}
+              />
+              <button
+                className="btn primary send"
+                disabled={!canRun}
+                onClick={submit}
+                aria-label={busy ? "Add to queue" : "Send"}
+                title={busy ? "Queue it — starts when this turn finishes (↵)" : "Send (↵)"}
+              >
+                {busy ? <AgentOrb phase="thinking" /> : <ArrowUp size={16} strokeWidth={2} />}
+              </button>
+            </div>
           </div>
         </footer>
 

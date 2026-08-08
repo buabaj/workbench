@@ -281,14 +281,30 @@ body {
   flex-shrink: 0;
 }
 .composer-meta { display: flex; align-items: center; gap: var(--s-2); font-size: var(--text-xs); }
-.composer-row { display: flex; gap: var(--s-2); align-items: flex-end; position: relative; }
-.composer-input {
-  flex: 1;
-  min-width: 0;
+/* One box: the text on top, the controls along the bottom of it.
+   The buttons used to sit OUTSIDE the input as siblings of it, which made
+   them read as three unrelated marks parked next to a field rather than as
+   the things that act on what you are typing. */
+.composer-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border-strong);
-  border-radius: var(--r-input);
+  border-radius: var(--r-panel);
   background: var(--canvas);
-  padding: 10px var(--s-3);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+/* focus-within, not :focus — the ring belongs to the box now, and the caret
+   is in a child of it. */
+.composer-box:focus-within {
+  border-color: var(--clay);
+  box-shadow: 0 0 0 3px var(--clay-wash);
+}
+.composer-input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 9px var(--s-3) 2px;
   color: var(--ink);
   font: inherit;
   line-height: 1.5;
@@ -298,13 +314,20 @@ body {
   resize: none;
   overflow-y: auto;
   max-height: 220px;
-  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 .composer-input::placeholder { color: var(--ink-faint); }
-.composer-input:focus {
-  border-color: var(--clay);
-  box-shadow: 0 0 0 3px var(--clay-wash);
+
+/* The bottom bar. `+` on the left because it adds to the message; voice and
+   send on the right because they act on it — the same split every chat
+   composer uses, and the reason it is worth copying is that it is already
+   learned. */
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 5px 5px;
 }
+.composer-actions .spacer { margin-left: auto; }
 
 /* ── form fields ──────────────────────────────────────────────────────── */
 .field {
@@ -326,12 +349,26 @@ body {
   outline: none;
 }
 
-/* Send: a circle, so the primary action reads as a single confident mark. */
+/* Send: a circle, so the primary action reads as a single confident mark.
+   28px matches the icon buttons beside it — a 31px circle next to a 27px
+   square is the kind of near-miss that reads as sloppy without being
+   nameable. */
 .btn.send {
   border-radius: var(--r-pill);
-  padding: 7px;
-  width: 31px;
-  height: 31px;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+/* Every control on the bar is the same square, so they sit on one baseline.
+   Direct children only: while recording, the voice control is a pill with its
+   own small stop/cancel buttons inside it, and sizing those to 28px would
+   inflate the pill and shove the bar around mid-recording. */
+.composer-actions > .btn.icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
   justify-content: center;
 }
 
