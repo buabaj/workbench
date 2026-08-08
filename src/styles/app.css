@@ -316,6 +316,12 @@ body {
   max-height: 220px;
 }
 .composer-input::placeholder { color: var(--ink-faint); }
+/* The box shows focus, so the textarea must not show it again.
+   Without this the global `:focus-visible` rule below draws its blue ring
+   INSIDE the clay one — two indicators for one caret. This relocates the
+   indicator rather than removing it: `.composer-box:focus-within` is lit by
+   exactly the same event, and is the thing you are actually focused on. */
+.composer-input:focus-visible { outline: none; }
 
 /* The bottom bar. `+` on the left because it adds to the message; voice and
    send on the right because they act on it — the same split every chat
