@@ -372,6 +372,14 @@ export const ipc = {
     invoke<BranchState>("worktree_branch", { workspaceId }),
   worktreePatch: (workspaceId: string, relPath: string) =>
     invoke<string>("worktree_patch", { workspaceId, relPath }),
+  pathRename: (workspaceId: string, from: string, to: string) =>
+    invoke<void>("path_rename", { workspaceId, from, to }),
+  pathDuplicate: (workspaceId: string, from: string, to: string) =>
+    invoke<void>("path_duplicate", { workspaceId, from, to }),
+  pathTrash: (workspaceId: string, path: string) =>
+    invoke<void>("path_trash", { workspaceId, path }),
+  pathReveal: (workspaceId: string, path: string) =>
+    invoke<void>("path_reveal", { workspaceId, path }),
   fileCreate: (workspaceId: string, path: string) =>
     invoke<void>("file_create", { workspaceId, path }),
   dirCreate: (workspaceId: string, path: string) =>

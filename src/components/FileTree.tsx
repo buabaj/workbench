@@ -4,6 +4,7 @@ import { useLayout } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
 import { FileIcon, FolderIcon } from "../icons/fileIcon";
 import { formatError, ipc, type TreeNode } from "../ipc/client";
+import type { TreeState } from "../vcs/treeStatus";
 import { useComposer } from "../store/composer";
 import { FileContextMenu } from "./FileContextMenu";
 
@@ -12,8 +13,88 @@ function parentOf(relPath: string): string {
   return i === -1 ? "" : relPath.slice(0, i);
 }
 
+/**
+ * Colour for a git state, matching what an editor's tree does: new is green,
+ * changed is the accent, gone is the error colour. Ignored files stay dim
+ * whatever their state, since they are not going into a commit.
+ */
+function stateColor(state: TreeState): string | undefined {
+  switch (state) {
+    case "added":
+      return "var(--diff-add)";
+    case "modified":
+      return "var(--clay-text)";
+    case "deleted":
+      return "var(--error)";
+    default:
+      return undefined;
+  }
+}
+
+/** Rename in place, so you can see the neighbours you are naming against. */
+function RenameField({ node, onDone }: { node: TreeNode; onDone: () => void }) {
+  const workspace = useWorkspace((s) => s.workspace);
+  const [name, setName] = useState(node.name);
+  const [err, setErr] = useState<string | null>(null);
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    ref.current?.focus();
+    // Select the stem, not the extension — renaming rarely means retyping ".ts".
+    const dot = node.name.lastIndexOf(".");
+    ref.current?.setSelectionRange(0, dot > 0 ? dot : node.name.length);
+  }, [node.name]);
+
+  const commit = async () => {
+    const next = name.trim();
+    if (!workspace || !next || next === node.name) return onDone();
+    const parent = parentOf(node.relPath);
+    try {
+      await ipc.pathRename(workspace.id, node.relPath, `${parent ? `${parent}/` : ""}${next}`);
+      await useWorkspace.getState().loadChildren(parent);
+      void useWorkspace.getState().refreshGitStatus();
+      onDone();
+    } catch (e) {
+      setErr(formatError(e));
+    }
+  };
+
+  return (
+    <span style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+      <input
+        ref={ref}
+        className="field"
+        style={{ width: "100%", fontSize: "var(--text-sm)", padding: "1px 4px" }}
+        aria-label={`Rename ${node.name}`}
+        value={name}
+        onChange={(e) => {
+          setName(e.target.value);
+          setErr(null);
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void commit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onDone();
+          }
+        }}
+        onBlur={() => !err && onDone()}
+      />
+      {err && (
+        <span role="alert" style={{ color: "var(--error)", fontSize: "var(--text-xs)" }}>
+          {err}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function Row({ node, depth }: { node: TreeNode; depth: number }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [renaming, setRenaming] = useState(false);
   const expanded = useWorkspace((s) => s.expanded[node.relPath] ?? false);
   const active = useLayout((s) => s.activeFile() === node.relPath);
   const phase = useWorkspace((s) => s.buffers[node.relPath]?.phase);
@@ -23,9 +104,33 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
   const selectedDir = useWorkspace((s) => s.selectedDir);
   const appendToChat = useComposer((s) => s.appendAndFocus);
   const focusChat = useLayout((s) => s.focusChat);
+  const workspace = useWorkspace((s) => s.workspace);
+  const gitStatus = useWorkspace((s) => s.gitStatus);
+
+  const rowRef = useRef<HTMLDivElement | null>(null);
+
+  // Bring the open file into view when it becomes active. Only on the
+  // transition, so this never fights you scrolling the tree yourself.
+  useEffect(() => {
+    if (active) rowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+
+  const state = node.ignored ? null : gitStatus.of(node.relPath);
+  // A collapsed folder shows a dot when something inside it changed — without
+  // it you would have to open every folder to find out where the work is.
+  const hidesChanges =
+    node.isDir && !node.ignored && !expanded && gitStatus.containsChanges(node.relPath);
 
   // Right-click reaches the same reference the @-menu and the selection bubble
   // produce, so a file gets into the chat the same way from anywhere.
+  const refresh = async () => {
+    const parent = parentOf(node.relPath);
+    await useWorkspace.getState().loadChildren(parent);
+    void useWorkspace.getState().refreshGitStatus();
+  };
+
+  // Deliberately short. An editor's file menu runs to twenty entries, most of
+  // which nobody uses; these are the ones reached for.
   const menuItems = [
     {
       label: "Add to chat",
@@ -34,9 +139,41 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
         focusChat();
       },
     },
+    { label: "Rename…", onSelect: () => setRenaming(true) },
+    ...(node.isDir
+      ? []
+      : [
+          {
+            label: "Duplicate",
+            onSelect: () => {
+              if (!workspace) return;
+              const dot = node.name.lastIndexOf(".");
+              const stem = dot > 0 ? node.name.slice(0, dot) : node.name;
+              const ext = dot > 0 ? node.name.slice(dot) : "";
+              const parent = parentOf(node.relPath);
+              const to = `${parent ? `${parent}/` : ""}${stem} copy${ext}`;
+              void ipc.pathDuplicate(workspace.id, node.relPath, to).then(refresh).catch(() => {});
+            },
+          },
+        ]),
     {
       label: "Copy path",
       onSelect: () => void navigator.clipboard.writeText(node.relPath).catch(() => {}),
+    },
+    {
+      label: "Reveal in Finder",
+      onSelect: () => {
+        if (workspace) void ipc.pathReveal(workspace.id, node.relPath).catch(() => {});
+      },
+    },
+    {
+      label: "Move to Trash",
+      onSelect: () => {
+        if (!workspace) return;
+        // The Trash, not an unlink — recoverable in Finder, so a misclick in a
+        // context menu cannot destroy work.
+        void ipc.pathTrash(workspace.id, node.relPath).then(refresh).catch(() => {});
+      },
     },
   ];
 
@@ -85,7 +222,20 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
             {expanded ? <ChevronDown size={12} strokeWidth={2} /> : <ChevronRight size={12} strokeWidth={2} />}
           </span>
           <FolderIcon open={expanded} />
-          <span className="label">{node.name}</span>
+          {renaming ? (
+            <RenameField node={node} onDone={() => setRenaming(false)} />
+          ) : (
+            <span className="label">{node.name}</span>
+          )}
+          {hidesChanges && (
+            <span
+              className="count git-dot"
+              title="Contains uncommitted changes"
+              aria-label="contains uncommitted changes"
+            >
+              ●
+            </span>
+          )}
         </div>
         {expanded && <Children subpath={node.relPath} depth={depth + 1} />}
         {menu && (
@@ -100,6 +250,7 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
 
   return (
     <div
+      ref={rowRef}
       className={`rail-item ${active ? "on" : ""}`}
       style={node.ignored ? { ...indent, opacity: 0.55 } : indent}
       role="treeitem"
@@ -115,7 +266,13 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
     >
       <span className="twisty" aria-hidden />
       <FileIcon name={node.name} />
-      <span className="label">{node.name}</span>
+      {renaming ? (
+        <RenameField node={node} onDone={() => setRenaming(false)} />
+      ) : (
+        <span className="label" style={{ color: stateColor(state) }}>
+          {node.name}
+        </span>
+      )}
       {phase === "dirty" && (
         <span className="count" style={{ color: "var(--clay-text)" }} aria-hidden>
           ●

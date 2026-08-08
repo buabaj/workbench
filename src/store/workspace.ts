@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { buildTreeStatus, NO_CHANGES, type TreeStatus } from "../vcs/treeStatus";
 import {
   ipc,
   isConflict,
@@ -45,6 +46,11 @@ interface WorkspaceStore {
   /** Transient one-line message, for actions with no visible result. */
   notice: string | null;
   notify(message: string): void;
+  /** Git state arranged for the tree; refreshed with the file watcher. */
+  gitStatus: TreeStatus;
+  refreshGitStatus(): Promise<void>;
+  /** Open every folder down to a path, so the tree shows where it lives. */
+  revealInTree(relPath: string): Promise<void>;
   selectDir(relPath: string): void;
   toggleDir(relPath: string): void;
   openFile(relPath: string): void;
@@ -76,18 +82,34 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     const ws = await ipc.workspacePick();
     if (ws) {
       editorRegistry.clear();
-      set({ workspace: ws, childrenByPath: {}, expanded: {}, buffers: {}, selectedDir: "" });
+      set({
+        workspace: ws,
+        childrenByPath: {},
+        expanded: {},
+        buffers: {},
+        selectedDir: "",
+        gitStatus: NO_CHANGES,
+      });
       await useLayout.getState().hydrate(ws.id);
       await get().loadChildren("");
+      void get().refreshGitStatus();
     }
   },
 
   openWorkspace: async (path) => {
     const ws = await ipc.workspaceOpen(path);
     editorRegistry.clear();
-    set({ workspace: ws, childrenByPath: {}, expanded: {}, buffers: {}, selectedDir: "" });
+    set({
+      workspace: ws,
+      childrenByPath: {},
+      expanded: {},
+      buffers: {},
+      selectedDir: "",
+      gitStatus: NO_CHANGES,
+    });
     await useLayout.getState().hydrate(ws.id);
     await get().loadChildren("");
+    void get().refreshGitStatus();
   },
 
   loadChildren: async (subpath) => {
@@ -108,6 +130,39 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
 
   /** Fold every directory shut, leaving the root level visible. */
   collapseAll: () => set({ expanded: {}, selectedDir: "" }),
+
+  gitStatus: NO_CHANGES,
+
+  refreshGitStatus: async () => {
+    const { workspace } = get();
+    if (!workspace || workspace.kind !== "git") {
+      set({ gitStatus: NO_CHANGES });
+      return;
+    }
+    try {
+      set({ gitStatus: buildTreeStatus(await ipc.worktreeChanges(workspace.id)) });
+    } catch {
+      // A tree with no markings is better than a tree with wrong ones.
+      set({ gitStatus: NO_CHANGES });
+    }
+  },
+
+  /**
+   * Expand the path to a file, loading each level on the way.
+   *
+   * The tree is lazy, so an ancestor's children may never have been fetched —
+   * marking it expanded without loading them would open an empty folder.
+   */
+  revealInTree: async (relPath) => {
+    const parts = relPath.split("/");
+    parts.pop(); // the file itself is not a folder to open
+    let prefix = "";
+    for (const part of parts) {
+      prefix = prefix ? `${prefix}/${part}` : part;
+      if (!get().childrenByPath[prefix]) await get().loadChildren(prefix);
+      set((s) => ({ expanded: { ...s.expanded, [prefix]: true } }));
+    }
+  },
 
   notice: null,
   notify: (message) => {
@@ -203,6 +258,9 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       if (childrenByPath[dir] !== undefined) void get().loadChildren(dir);
     }
     if (e.overflow) void get().loadChildren("");
+    // Editing a file changes its git state, so the markings follow the same
+    // signal the tree does rather than needing their own poll.
+    void get().refreshGitStatus();
   },
 }));
 

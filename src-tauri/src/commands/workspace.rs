@@ -318,6 +318,91 @@ pub fn file_read_bytes(
     Ok(tauri::ipc::Response::new(std::fs::read(p.abs())?))
 }
 
+/// Rename or move a file or directory within the workspace.
+///
+/// Both paths go through `resolve`, so neither the source nor the destination
+/// can point outside the workspace — a rename is a move, and a move is the
+/// easiest way to write somewhere you should not.
+#[tauri::command]
+pub fn path_rename(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+    from: String,
+    to: String,
+) -> Result<(), AppError> {
+    let root = root_for(&open, &workspace_id)?;
+    let src = root.resolve(&from, Intent::Write)?;
+    let dst = root.resolve(&to, Intent::Write)?;
+    if !src.abs().exists() {
+        return Err(AppError::NotFound("that file no longer exists".into()));
+    }
+    // Never silently replace: a rename onto an existing name would destroy it,
+    // and the caller cannot undo what it did not know it did.
+    if dst.abs().exists() {
+        return Err(AppError::Validation("something is already called that".into()));
+    }
+    if let Some(parent) = dst.abs().parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::rename(src.abs(), dst.abs())?;
+    Ok(())
+}
+
+/// Copy a file beside itself under a new name.
+#[tauri::command]
+pub fn path_duplicate(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+    from: String,
+    to: String,
+) -> Result<(), AppError> {
+    let root = root_for(&open, &workspace_id)?;
+    let src = root.resolve(&from, Intent::Read)?;
+    let dst = root.resolve(&to, Intent::Write)?;
+    if dst.abs().exists() {
+        return Err(AppError::Validation("something is already called that".into()));
+    }
+    if src.abs().is_dir() {
+        return Err(AppError::Validation("duplicating a folder is not supported".into()));
+    }
+    std::fs::copy(src.abs(), dst.abs())?;
+    Ok(())
+}
+
+/// Move a file or directory to the Trash.
+///
+/// The Trash rather than an unlink, so a mistake is recoverable in Finder.
+/// Deleting work irrecoverably from a context menu is not a thing this should
+/// be able to do.
+#[tauri::command]
+pub fn path_trash(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+    path: String,
+) -> Result<(), AppError> {
+    let root = root_for(&open, &workspace_id)?;
+    let p = root.resolve(&path, Intent::Write)?;
+    trash::delete(p.abs()).map_err(|e| AppError::Io(e.to_string()))?;
+    Ok(())
+}
+
+/// Show a path in Finder.
+#[tauri::command]
+pub fn path_reveal(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+    path: String,
+) -> Result<(), AppError> {
+    let root = root_for(&open, &workspace_id)?;
+    let p = root.resolve(&path, Intent::Read)?;
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(p.abs())
+        .spawn()
+        .map_err(|e| AppError::Io(e.to_string()))?;
+    Ok(())
+}
+
 /// Drop a workspace from the recents list, keeping everything it holds.
 ///
 /// A flag rather than a delete. The row is the anchor for that project's

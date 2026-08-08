@@ -700,3 +700,11 @@ body {
 .queued-row .queued-x { opacity: 0; transition: opacity var(--motion-fast, 120ms) ease; }
 .queued-row:hover .queued-x,
 .queued-row:focus-within .queued-x { opacity: 1; }
+
+/* A folder hiding uncommitted work. Small and warm rather than a badge: it
+   answers "is there anything in here" without claiming to say what. */
+.rail-item .git-dot {
+  color: var(--clay);
+  font-size: 8px;
+  line-height: 1;
+}

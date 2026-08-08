@@ -158,7 +158,15 @@ export default function App() {
     void refreshPreflight();
     void ipc.workspaceRecent().then(setRecent).catch(() => {});
     const un = onFsChanged(handleFsChanged);
+
+    // Committing touches only `.git`, which the file watcher deliberately
+    // ignores — so nothing would tell the tree its markings are stale. Coming
+    // back to the window is the signal that something happened elsewhere.
+    const onFocus = () => void useWorkspace.getState().refreshGitStatus();
+    window.addEventListener("focus", onFocus);
+
     return () => {
+      window.removeEventListener("focus", onFocus);
       void un.then((f) => f());
     };
   }, [initTheme, refreshPreflight, handleFsChanged]);
@@ -166,6 +174,15 @@ export default function App() {
   useEffect(() => {
     void refreshProfile(workspace?.id ?? null);
   }, [workspace?.id, refreshProfile]);
+
+  // Follow the open file in the tree, the way an editor does: switching to a
+  // tab should show you where that file lives, not leave you to find it.
+  // Only in code mode — research browses a flat note list, not a tree.
+  const activeFile = useLayout((s) => s.activeFile());
+  useEffect(() => {
+    if (!activeFile || mode !== "code" || railTab !== "files") return;
+    void useWorkspace.getState().revealInTree(activeFile);
+  }, [activeFile, mode, railTab]);
 
   useEffect(() => {
     void refreshVoiceCapability();
