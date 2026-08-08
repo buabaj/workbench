@@ -16,6 +16,21 @@ import { saveBuffer } from "../store/workspace";
  * authoritative. Never both.
  */
 
+/**
+ * A note's current text, from whichever holds it.
+ *
+ * The counterpart to `editNote`: reading the file while the editor holds
+ * unsaved work gives content that is already out of date, and decisions made
+ * on it — which PDF a paper points at, which annotations exist — are wrong in
+ * the same way the writes were.
+ */
+export async function readNote(workspaceId: string, relPath: string): Promise<string> {
+  const view = editorRegistry.liveView(relPath);
+  if (view) return view.state.doc.toString();
+  const current = await ipc.fileRead(workspaceId, relPath);
+  return current.text;
+}
+
 /** Apply a whole-document transform to a note, open or not. */
 export async function editNote(
   workspaceId: string,

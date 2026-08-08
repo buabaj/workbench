@@ -38,7 +38,7 @@ vi.mock("../store/workspace", () => ({
 }));
 
 import { editorRegistry } from "../editor/editorRegistry";
-import { editNote, replaceMarker } from "./noteEdits";
+import { editNote, readNote, replaceMarker } from "./noteEdits";
 
 const PATH = "papers/x.md";
 
@@ -145,5 +145,19 @@ describe("replaceMarker", () => {
 
     await replaceMarker("w", PATH, "…thinking(bbb)", "SECOND");
     expect(view.state.doc.toString()).toBe("one …thinking(aaa) two SECOND");
+  });
+});
+
+
+describe("readNote", () => {
+  it("answers from the editor when the note is open", async () => {
+    files.set(PATH, { text: "stale on disk", contentHash: "h1" });
+    mountView("fresh in the editor");
+    expect(await readNote("w", PATH)).toBe("fresh in the editor");
+  });
+
+  it("answers from the file when it is not", async () => {
+    files.set(PATH, { text: "on disk", contentHash: "h1" });
+    expect(await readNote("w", PATH)).toBe("on disk");
   });
 });

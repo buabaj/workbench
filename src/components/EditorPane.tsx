@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { frontmatterField } from "../research/frontmatter";
 import { appendAnnotation, parseAnnotations, type Annotation } from "../research/annotations";
-import { editNote } from "../research/noteEdits";
+import { editNote, readNote } from "../research/noteEdits";
 import { PdfView, type PdfSelection } from "../research/PdfView";
 import { SelectionBubble } from "../editor/SelectionBubble";
 import { useEditorSession } from "../editor/useEditorSession";
@@ -202,12 +202,13 @@ export function EditorPane() {
     setAnnotations([]);
     if (!workspace || !active || !/\.(md|markdown)$/i.test(active)) return;
     let live = true;
-    void ipc
-      .fileRead(workspace.id, active)
-      .then((c) => {
+    // Through `readNote`, so an open note answers from the editor rather than
+    // from a file that may be behind it.
+    void readNote(workspace.id, active)
+      .then((text) => {
         if (!live) return;
-        setPdfPath(frontmatterField(c.text, "pdf"));
-        setAnnotations(parseAnnotations(c.text));
+        setPdfPath(frontmatterField(text, "pdf"));
+        setAnnotations(parseAnnotations(text));
       })
       .catch(() => {});
     return () => {
