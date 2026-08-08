@@ -106,9 +106,17 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       set({ phase: "transcribing" });
       try {
         const result: TranscriptResult = await ipc.voiceFinish(sessionId, null);
+        // Tidy the fillers and punctuation before it lands. Its failure is not
+        // yours: anything other than a plausible clean-up of what you said —
+        // an error, a timeout, no key, a model that answered instead — falls
+        // back to the raw transcript, which is why this can run unasked.
+        const text = await ipc
+          .transcriptCleanup(result.text)
+          .then((c) => c.text)
+          .catch(() => result.text);
         // Insert as editable text. There is deliberately no path from here to
         // submitting the task — the user edits and sends it themselves.
-        onTranscript(result.text);
+        onTranscript(text);
         set({ phase: "idle", elapsedMs: 0, error: null, levels: [] });
       } catch (e) {
         set({ phase: "error", error: formatError(e) });

@@ -130,14 +130,7 @@ export function useEditorSession(workspaceId: string, relPath: string) {
 
         try {
           const out = await ipc.noteAction(workspaceId, d.instruction, text);
-          const landed = await replaceMarker(workspaceId, relPath, token, out.text.trim());
-          if (landed) {
-            // The record of what a model wrote lives outside the prose, so
-            // the note keeps the shape you gave it.
-            void ipc
-              .noteGenerationRecord(workspaceId, relPath, out.modelServed, d.instruction, out.text)
-              .catch(() => {});
-          }
+          await replaceMarker(workspaceId, relPath, token, out.text.trim());
         } catch (e) {
           await replaceMarker(
             workspaceId,

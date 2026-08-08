@@ -4,6 +4,7 @@
 
 pub mod dotenv;
 pub mod openrouter;
+pub mod profile;
 pub mod registry;
 
 use serde::Serialize;

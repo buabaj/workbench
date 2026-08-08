@@ -119,9 +119,19 @@ another provider.
 
 ## Optional: `.env` for the built-in helpers
 
-Voice transcription, conversation titles, and `@agent[…]` in notes use a small
-model directly rather than the coding agent. They need an
-[OpenRouter](https://openrouter.ai) key:
+Six small things use a model directly rather than the coding agent — no tools,
+no file access, one request and one answer:
+
+| | |
+|---|---|
+| Voice transcription | ⌘⇧V dictation |
+| Transcript cleanup | fillers and punctuation, before the words land |
+| Conversation titles | naming a chat from its opening exchange |
+| Inline note actions | `@agent[…]` inside a note |
+| Summarize | a paper note, on request |
+| Suggest links | `[[links]]` this note might belong with |
+
+They need an [OpenRouter](https://openrouter.ai) key:
 
 ```bash
 mkdir -p ~/.config/workbench
@@ -130,8 +140,15 @@ echo 'OPENROUTER_API_KEY=sk-or-v1-…' > ~/.config/workbench/.env
 
 `~/.config/workbench/.env` applies to every workspace. A `.env` in a workspace
 root also works and takes precedence, which is useful for keeping a project's
-usage separate. Everything else works without this; you simply lose those three
-features.
+usage separate. Everything else works without this; you simply lose the six
+above.
+
+Each picks a small, cheap model by default, chosen for what it actually needs —
+a summary of a paper note wants a large context window, dictation cleanup wants
+to be fast. **Settings → Built-in AI** lists all six with the model each will
+use and lets you change any of them; the candidates offered are filtered to
+models that can actually do the job, so an audio model is never proposed for
+text. Requests go out with provider fallbacks off and zero-retention asked for.
 
 Only `OPENROUTER_API_KEY` is ever read from `.env`, and the file is zeroized
 after parsing so the rest of its contents do not linger in memory.
@@ -168,6 +185,12 @@ the PDF when it is open access. Toggle **PDF** on a paper note to read it.
 Highlight a passage to ask the agent about it or annotate it — annotations are
 saved into the note and marked in the page's margin. Type `[[` in any note to
 link to another, and **Backlinks** shows both directions.
+
+**Summary** and **Suggested** sit above the backlinks. Summarize reads the open
+note and shows what it found; it becomes a `## Summary` section only if you press
+Insert. Suggest links proposes notes this one belongs with, each with a line on
+why, and each becomes a link only when you click it — the model can only choose
+from notes that exist, so a suggestion never invents one.
 
 **`@agent[…]`** written inside a note runs on ⌘↵ and is replaced by the answer —
 clean prose, no markers and no change to the shape of what you are writing. If it
@@ -217,8 +240,6 @@ save everything and then quit.
 - The unsaved-changes prompt covers ⌘Q and closing the window. Quitting from the
   Dock or logging out still discards unsaved work: macOS delivers no event there
   that can be held (measured — see the comment in `src-tauri/src/lib.rs`).
-- Three capabilities appear in Settings but are not implemented:
-  `transcript.cleanup`, `research.summarize`, `links.suggest`.
 - Untested on Intel Macs and on anything but macOS.
 
 ---

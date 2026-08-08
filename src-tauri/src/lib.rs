@@ -204,8 +204,6 @@ pub fn run() {
             commands::tasks::agent_resume_task,
             commands::tasks::chat_title,
             commands::tasks::note_action,
-            commands::tasks::note_generation_record,
-            commands::tasks::note_generations,
             commands::search::search_run,
             commands::search::search_replace,
             commands::pty::pty_open,
@@ -231,6 +229,11 @@ pub fn run() {
             commands::voice::voice_configure,
             commands::voice::models_for_capability,
             commands::voice::appai_capabilities,
+            commands::appai::transcript_cleanup,
+            commands::appai::research_summarize,
+            commands::appai::links_suggest,
+            commands::appai::capability_status,
+            commands::appai::capability_choose_models,
         ])
         .on_menu_event(|app, event| {
             if event.id() == "quit" && !request_quit(app) {

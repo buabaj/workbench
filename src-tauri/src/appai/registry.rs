@@ -1,6 +1,9 @@
-//! Capability registry. Only `voice.transcription` is implemented in this
-//! slice; the rest are registered now so the capability-profile schema and the
-//! model-filter contract are fixed before there's pressure to bend either.
+//! Capability registry: what Workbench's own AI can do, and what each needs
+//! from a model.
+//!
+//! `required_input`/`required_output` are what make a model list per capability
+//! possible — OpenRouter's catalogue is filtered by modality, so a text model
+//! never appears as a candidate for transcription.
 
 pub struct CapabilitySpec {
     pub key: &'static str,
@@ -62,26 +65,44 @@ pub const CAPABILITIES: &[CapabilitySpec] = &[
     CapabilitySpec {
         key: "transcript.cleanup",
         display_name: "Transcript cleanup",
-        implemented: false,
+        implemented: true,
         required_input: &["text"],
         required_output: &["text"],
-        default_models: &[],
+        // Sits between speaking and seeing your words, so latency is the whole
+        // experience — the same tier as titles, for the same reason.
+        default_models: &[
+            "google/gemini-3.5-flash-lite",
+            "openai/gpt-4o-mini",
+            "anthropic/claude-haiku-4.5",
+        ],
     },
     CapabilitySpec {
         key: "research.summarize",
         display_name: "Summarize",
-        implemented: false,
+        implemented: true,
         required_input: &["text"],
         required_output: &["text"],
-        default_models: &[],
+        // Reads a whole paper note, extracted full text and all, so the window
+        // matters more than anything else here.
+        default_models: &[
+            "deepseek/deepseek-v4-flash",
+            "anthropic/claude-haiku-4.5",
+            "google/gemini-3.5-flash-lite",
+        ],
     },
     CapabilitySpec {
         key: "links.suggest",
         display_name: "Suggest links",
-        implemented: false,
+        implemented: true,
         required_input: &["text"],
         required_output: &["text"],
-        default_models: &[],
+        // Same shape as summarizing: a long note in, a short structured answer
+        // out, and it has to hold the vault's note names alongside it.
+        default_models: &[
+            "deepseek/deepseek-v4-flash",
+            "google/gemini-3.5-flash-lite",
+            "anthropic/claude-haiku-4.5",
+        ],
     },
 ];
 

@@ -2,7 +2,9 @@ import { CornerDownRight } from "lucide-react";
 import { useMemo } from "react";
 import { useLayout } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
+import { NoteSummary } from "./NoteSummary";
 import { useVault } from "./NotesPanel";
+import { SuggestedLinks } from "./SuggestedLinks";
 import { backlinksTo, noteName, parseWikiLinks, resolveLink } from "./wikilinks";
 
 /**
@@ -76,13 +78,15 @@ export function BacklinksPanel() {
   // most people's first encounter with the idea, so it explains it.
   if (!active) return <Explainer heading="Open a note to see its links." />;
 
+  // A note with no links is exactly when suggestions are worth the most, so
+  // the explainer replaces the lists rather than the whole panel.
   const empty = incoming.length === 0 && outgoing.length === 0;
-  if (empty) {
-    return <Explainer heading={`Nothing links to ${noteName(active)} yet.`} />;
-  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-3)" }}>
+      <NoteSummary />
+      <SuggestedLinks />
+      {empty && <Explainer heading={`Nothing links to ${noteName(active)} yet.`} />}
       {incoming.length > 0 && (
         <div>
           <div

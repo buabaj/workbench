@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { CapabilityList } from "./CapabilityList";
 import { PreflightPanel } from "./Preflight";
 import {
   formatError,
@@ -504,6 +505,21 @@ export function SettingsView() {
             )}
           </div>
         </Row>
+      </Section>
+
+      <Section title="Built-in AI">
+        <div
+          style={{
+            fontSize: "var(--text-sm)",
+            color: "var(--ink-muted)",
+            marginBottom: "var(--s-3)",
+            lineHeight: 1.6,
+          }}
+        >
+          Workbench's own AI, separate from the coding agent: no tools, no file access, one
+          request and one answer. It runs on your OpenRouter key with provider fallbacks off.
+        </div>
+        <CapabilityList />
       </Section>
 
       <Section title="Diagnostics">

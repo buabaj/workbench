@@ -41,13 +41,32 @@ export interface ImportOutcome {
   hasFullText: boolean;
 }
 
-export interface NoteGeneration {
-  id: string;
-  relPath: string;
-  model: string;
-  instruction: string;
+/** Text from an internal capability, with the model that actually answered —
+ *  which is not always the one asked for, since the chain falls back. */
+export interface Completion {
   text: string;
-  createdAt: number;
+  modelServed: string;
+}
+
+export interface LinkSuggestion {
+  /** Always the name of a note that exists. */
+  name: string;
+  why: string;
+}
+
+export interface LinkSuggestions {
+  suggestions: LinkSuggestion[];
+  modelServed: string;
+}
+
+export interface CapabilityStatus {
+  key: string;
+  displayName: string;
+  implemented: boolean;
+  defaultModels: string[];
+  effectiveModels: string[];
+  /** Whether the model came from a choice made in Settings. */
+  chosen: boolean;
 }
 
 export interface NoteDoc {
@@ -359,11 +378,24 @@ export const ipc = {
   /** Run an `@agent[...]` directive. Reports which model actually answered,
    *  so the note can record it rather than the one that was asked. */
   noteAction: (workspaceId: string, instruction: string, context: string) =>
-    invoke<{ text: string; modelServed: string }>("note_action", {
+    invoke<Completion>("note_action", {
       workspaceId,
       instruction,
       context,
     }),
+  /** Tidy raw dictation. The caller keeps the raw text: this is an
+   *  improvement, never a replacement it cannot undo. */
+  transcriptCleanup: (text: string) => invoke<Completion>("transcript_cleanup", { text }),
+  /** Summarise a note. Returned, not written — where it lands is the caller's. */
+  researchSummarize: (text: string) => invoke<Completion>("research_summarize", { text }),
+  /** Propose `[[links]]` from this note. `candidates` bounds the answer: the
+   *  backend drops anything not in it, so a suggestion always names a real note. */
+  linksSuggest: (text: string, candidates: string[]) =>
+    invoke<LinkSuggestions>("links_suggest", { text, candidates }),
+  capabilityStatus: () => invoke<CapabilityStatus[]>("capability_status"),
+  /** An empty list resets the capability to its built-in default. */
+  capabilityChooseModels: (capability: string, modelIds: string[]) =>
+    invoke<void>("capability_choose_models", { capability, modelIds }),
   scholarSearch: (query: string, limit?: number) =>
     invoke<Paper[]>("scholar_search", { query, limit }),
   paperImport: (workspaceId: string, paper: Paper) =>
@@ -468,17 +500,6 @@ export const ipc = {
   chatSessions: (workspaceId: string) => invoke<SessionSummary[]>("chat_sessions", { workspaceId }),
   chatDeleteSession: (taskId: string) => invoke<void>("chat_delete_session", { taskId }),
 
-  /** Record what a model wrote into a note — kept beside the note, not in it. */
-  noteGenerationRecord: (
-    workspaceId: string,
-    relPath: string,
-    model: string,
-    instruction: string,
-    text: string,
-  ) =>
-    invoke<void>("note_generation_record", { workspaceId, relPath, model, instruction, text }),
-  noteGenerations: (workspaceId: string, relPath: string) =>
-    invoke<NoteGeneration[]>("note_generations", { workspaceId, relPath }),
 
   /** Name a conversation from its opening exchange, using the internal model. */
   chatTitle: (taskId: string) => invoke<string>("chat_title", { taskId }),
