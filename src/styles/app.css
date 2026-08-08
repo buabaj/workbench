@@ -682,39 +682,69 @@ body {
 /* An annotation's marker, in the page's left margin. Deliberately small and
    in the margin rather than over the text: it points at a passage without
    covering the words it points at. */
-.pdf-mark {
+/* An annotated passage, tinted in place.
+   `multiply` over the white page reads like a highlighter — the words stay
+   legible through it — where an opaque box would sit on top of them. Faint on
+   purpose: it has to be findable when you are looking for it and ignorable
+   when you are reading. */
+.pdf-highlight {
+  position: absolute;
+  z-index: 2;
   appearance: none;
   border: 0;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: var(--clay);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: default;
-  box-shadow: 0 1px 3px #0003;
+  padding: 0;
+  background: color-mix(in srgb, var(--clay) 26%, transparent);
+  mix-blend-mode: multiply;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
 }
-.pdf-mark:hover { background: var(--clay-hover); }
-.pdf-mark-note {
+/* Hover has to say "this is clickable" without moving the text under it, so
+   the tint deepens and a rule appears beneath rather than anything shifting. */
+.pdf-highlight:hover,
+.pdf-highlight.on {
+  background: color-mix(in srgb, var(--clay) 44%, transparent);
+  box-shadow: inset 0 -1.5px 0 var(--clay);
+}
+
+/* The note itself. Wide and unclipped, because the old one was a 260px box
+   that truncated the quote and wrapped the comment into an unreadable column —
+   which made the annotation useless at exactly the moment you went back for
+   it. */
+.pdf-note {
   position: absolute;
-  left: 20px;
-  top: 0;
-  width: 260px;
-  padding: 8px 10px;
+  z-index: 6;
+  width: 320px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 10px 12px;
   background: var(--canvas);
   color: var(--ink);
   border: 1px solid var(--border);
   border-left: 2px solid var(--clay);
   border-radius: var(--r-control);
   box-shadow: var(--lift-strong);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  white-space: pre-wrap;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  text-align: left;
+  white-space: normal;
   user-select: text;
-  z-index: 5;
 }
+.pdf-note-quote {
+  color: var(--ink-faint);
+  font-style: italic;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  /* The whole quote, up to a point — several lines are readable, a paragraph
+     buries the comment you came to read. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pdf-note-body { white-space: pre-wrap; }
+
 
 /* The remove control on a recent workspace stays out of the way until the row
    is hovered: it is a rarely-wanted action sitting on a frequently-wanted one. */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   appendAnnotation,
+  findQuoteSpans,
   findQuoteStart,
   parseAnnotations,
   renderAnnotation,
@@ -113,5 +114,50 @@ describe("findQuoteStart", () => {
     expect(findQuoteStart(items, "something else entirely")).toBe(-1);
     expect(findQuoteStart(items, "")).toBe(-1);
     expect(findQuoteStart([], "anything")).toBe(-1);
+  });
+});
+
+describe("finding the extent of a quoted passage", () => {
+  // pdf.js emits a run per style change, so one sentence is many spans. A
+  // highlight that used only the first would underline a single word.
+  const items = [
+    { str: "The compute-optimal " },
+    { str: "frontier " },
+    { str: "shifts with " },
+    { str: "token budget. " },
+    { str: "Later text." },
+  ];
+
+  it("covers every run the passage touches", () => {
+    const span = findQuoteSpans(items, "compute-optimal frontier shifts");
+    expect(span).toEqual({ from: 0, to: 2 });
+  });
+
+  it("stops at the run the passage ends in", () => {
+    const span = findQuoteSpans(items, "The compute-optimal");
+    expect(span?.to).toBe(0);
+  });
+
+  it("covers the whole passage, not just a matched opening", () => {
+    // The old prefix-only match would have stopped at 60 characters.
+    const long = "The compute-optimal frontier shifts with token budget.";
+    expect(findQuoteSpans(items, long)).toEqual({ from: 0, to: 3 });
+  });
+
+  it("marks what is here when the selection ran past the page break", () => {
+    const span = findQuoteSpans(items, "token budget. And then a paragraph that lives on the next page entirely");
+    expect(span).not.toBeNull();
+    expect(span!.from).toBeLessThanOrEqual(3);
+  });
+
+  it("ignores whitespace differences, as the extractor reflows", () => {
+    // Only whitespace: punctuation is meaningful, and dropping the hyphen
+    // would let "compute optimal" match text that never said it.
+    expect(findQuoteSpans(items, "compute-optimal\n\n  frontier")).toEqual({ from: 0, to: 1 });
+  });
+
+  it("returns null when the passage is not on this page", () => {
+    expect(findQuoteSpans(items, "a sentence from another paper")).toBeNull();
+    expect(findQuoteSpans(items, "   ")).toBeNull();
   });
 });

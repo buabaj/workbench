@@ -130,3 +130,61 @@ export function findQuoteStart(items: Array<{ str?: string }>, quote: string): n
   }
   return idx;
 }
+
+
+/**
+ * Which text runs a quoted passage covers, so it can be highlighted in place.
+ *
+ * `findQuoteStart` answers "where does this begin", which was enough to hang a
+ * marker in the margin. Highlighting the passage itself needs its extent: a
+ * sentence in a PDF is rarely one span — pdf.js emits a run per style change,
+ * per ligature break, sometimes per word — so a quote of any length covers
+ * several, and highlighting only the first would underline a single word.
+ *
+ * Returns inclusive indices, or null when the passage is not on this page.
+ */
+export function findQuoteSpans(
+  items: Array<{ str?: string }>,
+  quote: string,
+): { from: number; to: number } | null {
+  const needle = quote.replace(/\s+/g, "").toLowerCase();
+  if (!needle) return null;
+
+  let joined = "";
+  const starts: number[] = [];
+  for (const item of items) {
+    starts.push(joined.length);
+    joined += (item.str ?? "").replace(/\s+/g, "").toLowerCase();
+  }
+
+  // The whole passage first, so a quote that IS all here highlights all of it.
+  // The shorter openings are the page-break case: a selection dragged past the
+  // bottom of a page starts here and ends somewhere this page has never seen,
+  // and marking the part that is here beats marking nothing.
+  let at = -1;
+  let matched = 0;
+  for (const len of [needle.length, 60, 40, 24, 12]) {
+    if (len > needle.length) continue;
+    const hit = joined.indexOf(needle.slice(0, len));
+    if (hit !== -1) {
+      at = hit;
+      matched = len;
+      break;
+    }
+  }
+  if (at === -1) return null;
+
+  const end = at + matched;
+  let from = 0;
+  for (let i = 0; i < starts.length; i++) {
+    if (starts[i] <= at) from = i;
+    else break;
+  }
+  // The last run that begins before the passage ends is the one it finishes in.
+  let to = from;
+  for (let i = from; i < starts.length; i++) {
+    if (starts[i] < end) to = i;
+    else break;
+  }
+  return { from, to };
+}

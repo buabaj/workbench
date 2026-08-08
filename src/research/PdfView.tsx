@@ -11,7 +11,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // entry point and never in the app.
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
-import { findQuoteStart, type Annotation } from "./annotations";
+import { findQuoteSpans, type Annotation } from "./annotations";
+
+interface Rect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
 import { useComposer } from "../store/composer";
 import { useLayout } from "../store/layout";
 
@@ -164,6 +171,41 @@ function Page({
   const [renderErr, setRenderErr] = useState<string | null>(null);
   const [items, setItems] = useState<unknown[]>([]);
   const [openMark, setOpenMark] = useState<number | null>(null);
+  /** Where each annotation's passage sits, in page coordinates. */
+  const [boxes, setBoxes] = useState<Array<{ i: number; rects: Rect[] }>>([]);
+
+  // Measured from the live DOM rather than computed from the text items,
+  // because pdf.js positions text-layer runs with transforms and a run's
+  // offsetWidth does not describe where it actually appears. Re-measured
+  // whenever the layer is rebuilt or the zoom changes.
+  useEffect(() => {
+    const host = hostRef.current;
+    const layer = textRef.current;
+    if (!host || !layer || items.length === 0 || annotations.length === 0) {
+      setBoxes([]);
+      return;
+    }
+    const origin = host.getBoundingClientRect();
+    const measured = annotations.map((a, i) => {
+      const span = findQuoteSpans(items as Array<{ str?: string }>, a.quote);
+      if (!span) return { i, rects: [] as Rect[] };
+      const rects: Rect[] = [];
+      for (let k = span.from; k <= span.to; k++) {
+        const el = layer.children[k] as HTMLElement | undefined;
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 0.5 || r.height < 0.5) continue;
+        rects.push({
+          left: r.left - origin.left,
+          top: r.top - origin.top,
+          width: r.width,
+          height: r.height,
+        });
+      }
+      return { i, rects };
+    });
+    setBoxes(measured.filter((m) => m.rects.length > 0));
+  }, [items, annotations, scale]);
 
   // Reserve the page's space before it renders, so the scrollbar does not
   // lurch as pages fill in behind you.
@@ -286,36 +328,52 @@ function Page({
       }}
     >
       <canvas ref={canvasRef} style={{ display: "block", position: "relative", zIndex: 1 }} />
-      {annotations.map((a, i) => {
-        const at = findQuoteStart(items as Array<{ str?: string }>, a.quote);
-        const span = at >= 0 ? (textRef.current?.children[at] as HTMLElement | undefined) : undefined;
-        if (!span) return null;
-        return (
-          <div
-            key={i}
-            style={{ position: "absolute", left: 2, top: span.offsetTop - 2, zIndex: 4 }}
-          >
+      {/* The passage itself, tinted — not a marker in the margin.
+          `multiply` over the white page reads like a highlighter rather than a
+          coloured box sitting on top of the words, and keeps the text legible
+          through it. Above the canvas, below the text layer, so selecting
+          still works straight through a highlight. */}
+      {boxes.map(({ i, rects }) => (
+        <div key={i}>
+          {rects.map((r, k) => (
             <button
-              className="pdf-mark"
-              aria-label={`Annotation: ${a.comment.slice(0, 60)}`}
+              key={k}
+              className={`pdf-highlight ${openMark === i ? "on" : ""}`}
+              style={{ left: r.left, top: r.top, width: r.width, height: r.height }}
+              aria-label={`Note on “${annotations[i].quote.slice(0, 40)}”`}
               aria-expanded={openMark === i}
-              title={a.comment}
-              onClick={() => setOpenMark(openMark === i ? null : i)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenMark(openMark === i ? null : i);
+              }}
+            />
+          ))}
+          {openMark === i && (
+            <div
+              className="pdf-note"
+              role="note"
+              // Below the passage, and pinned inside the page: a note on the
+              // right-hand column would otherwise hang off the edge.
+              style={{
+                top: rects[0].top + rects[0].height + 6,
+                left: Math.max(8, Math.min(rects[0].left, (size?.w ?? 600) - 340)),
+              }}
             >
-              <PenLine size={9} strokeWidth={2.2} />
-            </button>
-            {openMark === i && (
-              <div className="pdf-mark-note" role="note">
-                <div style={{ color: "var(--ink-faint)", marginBottom: 4, fontStyle: "italic" }}>
-                  “{a.quote.slice(0, 120)}
-                  {a.quote.length > 120 ? "…" : ""}”
-                </div>
-                {a.comment}
+              <div className="pdf-note-quote">
+                “{annotations[i].quote}”
               </div>
-            )}
-          </div>
-        );
-      })}
+              <div className="pdf-note-body">{annotations[i].comment}</div>
+              <button
+                className="btn small"
+                onClick={() => setOpenMark(null)}
+                style={{ marginTop: 8 }}
+              >
+                Close
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
 
       {renderErr && (
         <div
