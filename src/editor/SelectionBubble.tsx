@@ -2,7 +2,6 @@ import { EditorView } from "@codemirror/view";
 import { MessageSquarePlus, Wand2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useComposer } from "../store/composer";
-import { useLayout } from "../store/layout";
 import { useLinks } from "../store/links";
 
 /**
@@ -41,7 +40,6 @@ export function SelectionBubble({
 }) {
   const [pos, setPos] = useState<Pos | null>(null);
   const append = useComposer((s) => s.appendAndFocus);
-  const focusChat = useLayout((s) => s.focusChat);
   // The editor already publishes its live selection here, on every selection
   // change, so the bubble follows it rather than guessing from raw events.
   const selection = useLinks((s) => s.selection);
@@ -96,8 +94,10 @@ export function SelectionBubble({
       : `@${relPath}:${pos.fromLine}-${pos.toLine}`;
 
   const act = (text: string) => {
+    // Deliberately does NOT switch to the chat tab. The composer is on screen
+    // at all times, so adding a reference costs you nothing — being thrown out
+    // of the file you were reading, in order to type about it, was the cost.
     append(text);
-    focusChat();
     setPos(null);
   };
 

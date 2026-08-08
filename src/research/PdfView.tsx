@@ -20,7 +20,6 @@ interface Rect {
   height: number;
 }
 import { useComposer } from "../store/composer";
-import { useLayout } from "../store/layout";
 
 /**
  * A PDF, rendered locally and read continuously.
@@ -433,7 +432,6 @@ export function PdfView({
   const [err, setErr] = useState<string | null>(null);
   const [sel, setSel] = useState<PdfSelection | null>(null);
   const append = useComposer((s) => s.appendAndFocus);
-  const focusChat = useLayout((s) => s.focusChat);
 
   useEffect(() => {
     let cancelled = false;
@@ -478,9 +476,11 @@ export function PdfView({
     // The quote goes in verbatim: unlike a code selection there is no line
     // range to point at, and the agent cannot open a PDF to look for itself.
     append(`From @${relPath} (p.${sel.page}):\n\n> ${sel.text.replace(/\n+/g, " ")}\n\n`);
-    focusChat();
+    // Stays on the page you were reading. The composer is always on screen,
+    // and being thrown into the chat to type about a passage means losing the
+    // passage.
     setSel(null);
-  }, [sel, relPath, append, focusChat]);
+  }, [sel, relPath, append]);
 
   if (err) {
     return (

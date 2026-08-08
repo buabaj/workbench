@@ -314,7 +314,46 @@ body {
   overflow-y: auto;
   max-height: 220px;
 }
+/* Transparent text, visible caret: the glyphs come from the mirror behind,
+   which is the only way to colour part of a textarea's contents. */
+.composer-input {
+  color: transparent;
+  caret-color: var(--ink);
+  position: relative;
+  z-index: 1;
+}
 .composer-input::placeholder { color: var(--ink-faint); }
+/* Selection has to stay legible even though the text itself is transparent,
+   so it paints its own colour rather than relying on the glyphs. */
+.composer-input::selection { background: var(--clay-wash); color: var(--ink); }
+
+.composer-mirror-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.composer-mirror {
+  color: var(--ink);
+  /* Wrapping must match the textarea's exactly or the two drift apart as
+     lines break in different places. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  max-height: none;
+  min-height: 100%;
+  /* Inherited `overflow-y: auto` would give the mirror its own scrollbar and
+     narrow it by a few pixels — enough to break every line differently from
+     the textarea it is standing in for. */
+  overflow: visible;
+}
+/* The same clay a reference gets in the transcript, so it reads the same in
+   the box you typed it in as in the message you sent. */
+.composer-mention {
+  color: var(--clay-text);
+  font-family: var(--mono);
+  font-size: 0.95em;
+}
 /* The box shows focus, so the textarea must not show it again.
    Without this the global `:focus-visible` rule below draws its blue ring
    INSIDE the clay one — two indicators for one caret. This relocates the

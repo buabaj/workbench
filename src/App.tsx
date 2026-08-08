@@ -28,6 +28,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FileTree } from "./components/FileTree";
 import { Palette, type PaletteMode } from "./components/Palette";
 import { AttachmentStrip } from "./components/AttachmentStrip";
+import { ComposerMirror } from "./components/ComposerMirror";
 import { QueuedList } from "./components/QueuedList";
 import { QuitGuard } from "./components/QuitGuard";
 import { ReviewPanel } from "./components/ReviewPanel";
@@ -164,6 +165,8 @@ export default function App() {
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
   const [commandNote, setCommandNote] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
+  // The mirror has to follow the textarea when a long prompt scrolls inside it.
+  const [promptScroll, setPromptScroll] = useState(0);
   const mode = useLayout((s) => s.mode);
   const setMode = useLayout((s) => s.setMode);
   const railTab = useLayout((s) => s.railTab);
@@ -779,9 +782,16 @@ export default function App() {
                 onClose={() => setCaret(-1)}
               />
             )}
+            {/* Behind the textarea, carrying the colour the textarea cannot.
+                Both wear `.composer-input`, so they lay text out identically —
+                the mirror adds no metrics of its own. */}
+            <div className="composer-mirror-wrap">
+              <ComposerMirror text={prompt} scrollTop={promptScroll} />
+            </div>
             <textarea
               ref={promptRef}
               className="composer-input"
+              onScroll={(e) => setPromptScroll(e.currentTarget.scrollTop)}
               rows={1}
               placeholder={workspace ? PLACEHOLDER : "Open a workspace to run tasks"}
               value={prompt}
