@@ -1,6 +1,7 @@
-import { Check, FileText, Image as ImageIcon, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { ArrowDown, Check, FileText, Image as ImageIcon, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { Attachment } from "../chat/attachments";
+import { isAtBottom } from "../chat/follow";
 import { AgentOrb, PHASE_LABEL } from "./AgentOrb";
 import { Markdown } from "./Markdown";
 import { useChat, type Turn } from "../store/chat";
@@ -206,11 +207,55 @@ export function ChatView() {
   const resolved = useChat((s) => s.resolvedProfile);
   const stop = useChat((s) => s.stop);
   const endRef = useRef<HTMLDivElement>(null);
+  const colRef = useRef<HTMLDivElement>(null);
+  // A ref, not state: the streaming effect reads it on every delta and must
+  // see the current value without re-subscribing.
+  const pinnedRef = useRef(true);
+  const [adrift, setAdrift] = useState(false);
 
-  // Follow the conversation as it grows, the way a chat should.
+  // Whether the view is sitting at the bottom.
+  //
+  // This is the whole fix. Following the stream unconditionally means that
+  // scrolling up to re-read something is a fight: every token yanks you back
+  // down, and the harder you scroll the more it pulls. Reading is a deliberate
+  // act, so it wins — following resumes when you return to the bottom.
   useEffect(() => {
+    const scroller = colRef.current?.closest(".canvas") as HTMLElement | null;
+    if (!scroller) return;
+    const onScroll = () => {
+      const atBottom = isAtBottom(
+        scroller.scrollHeight,
+        scroller.scrollTop,
+        scroller.clientHeight,
+      );
+      pinnedRef.current = atBottom;
+      setAdrift(!atBottom);
+    };
+    onScroll();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, [turns.length === 0]);
+
+  // A new turn means you just acted, or the agent just began a reply to
+  // something you sent. Either way you want to see it, so following resumes.
+  useEffect(() => {
+    if (turns.length === 0) return;
+    pinnedRef.current = true;
+    setAdrift(false);
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [turns.length, turns[turns.length - 1]?.text]);
+  }, [turns.length]);
+
+  // Streaming text: follow only while pinned.
+  useEffect(() => {
+    if (!pinnedRef.current) return;
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [turns[turns.length - 1]?.text]);
+
+  const toLatest = () => {
+    pinnedRef.current = true;
+    setAdrift(false);
+    endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  };
 
   if (turns.length === 0) {
     return (
@@ -238,7 +283,7 @@ export function ChatView() {
   const busy = status === "starting" || status === "streaming";
 
   return (
-    <div className="chat-col">
+    <div className="chat-col" ref={colRef}>
       {turns.map((t) => (
         <TurnView key={t.id} turn={t} />
       ))}
@@ -257,6 +302,36 @@ export function ChatView() {
           </button>
         )}
       </div>
+      {/* Sticky, so it rides the bottom edge of the scrollport while you read
+          above it. Only while the agent is still writing: when nothing is
+          being added, scrolling up is just reading and needs no way back. */}
+      {adrift && busy && (
+        <div
+          style={{
+            position: "sticky",
+            bottom: "var(--s-3)",
+            display: "flex",
+            justifyContent: "center",
+            pointerEvents: "none",
+          }}
+        >
+          <button
+            className="btn"
+            onClick={toLatest}
+            style={{
+              pointerEvents: "auto",
+              fontSize: "var(--text-xs)",
+              padding: "4px 12px",
+              background: "var(--canvas)",
+              boxShadow: "var(--lift-strong)",
+              borderRadius: "var(--r-pill)",
+            }}
+          >
+            <ArrowDown size={11} strokeWidth={2} />
+            Jump to latest
+          </button>
+        </div>
+      )}
       <div ref={endRef} />
     </div>
   );

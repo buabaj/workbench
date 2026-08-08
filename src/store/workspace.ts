@@ -9,6 +9,7 @@ import {
   type WorkspaceView,
 } from "../ipc/client";
 import { editorRegistry } from "../editor/editorRegistry";
+import { markStale, primeIndex } from "./fileIndex";
 import { fileTabId, useLayout } from "./layout";
 
 export type BufferPhase = "clean" | "dirty" | "conflict" | "deleted";
@@ -91,6 +92,8 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
         gitStatus: NO_CHANGES,
       });
       await useLayout.getState().hydrate(ws.id);
+      // Warm, so the first ⌘P opens with the list already in it.
+      primeIndex(ws.id);
       await get().loadChildren("");
       void get().refreshGitStatus();
     }
@@ -108,6 +111,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       gitStatus: NO_CHANGES,
     });
     await useLayout.getState().hydrate(ws.id);
+    primeIndex(ws.id);
     await get().loadChildren("");
     void get().refreshGitStatus();
   },
@@ -261,6 +265,10 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     // Editing a file changes its git state, so the markings follow the same
     // signal the tree does rather than needing their own poll.
     void get().refreshGitStatus();
+    // The palette's list is now possibly wrong. Marked rather than rewalked:
+    // a save fires this constantly, and re-walking a large tree on every
+    // keystroke-triggered write would cost far more than it buys.
+    markStale(workspace.id);
   },
 }));
 

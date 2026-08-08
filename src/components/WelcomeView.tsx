@@ -1,5 +1,6 @@
 import { BookOpen, FolderOpen, Code2, Clock, X } from "lucide-react";
 import { ButterflyMark } from "./ButterflyMark";
+import { forgetIndex } from "../store/fileIndex";
 import { ipc, type WorkspaceView } from "../ipc/client";
 import { useEffect, useState } from "react";
 import { useWorkspace } from "../store/workspace";
@@ -161,6 +162,8 @@ export function WelcomeView() {
                     // so there is nothing to be careful about undoing.
                     setRecent((rs) => rs.filter((r) => r.id !== w.id));
                     void ipc.workspaceForget(w.id).catch(() => {});
+                    // Its paths mean nothing once it is gone.
+                    forgetIndex(w.id);
                   }}
                   style={{ padding: 2, flexShrink: 0, color: "var(--ink-faint)" }}
                 >

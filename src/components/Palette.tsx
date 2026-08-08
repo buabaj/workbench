@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { cachedIndex, loadIndex } from "../store/fileIndex";
 import { availableCommands, fuzzyScore, type Command } from "../commands/registry";
 import { FileIcon } from "../icons/fileIcon";
-import { ipc } from "../ipc/client";
 import { useWorkspace } from "../store/workspace";
 
 export type PaletteMode = "files" | "commands";
@@ -24,8 +24,12 @@ export function Palette({
 }) {
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
-  const [files, setFiles] = useState<string[]>([]);
+  // Seeded from the warm index: the palette paints with rows already in it
+  // rather than showing an empty list that fills in a moment later.
   const workspace = useWorkspace((s) => s.workspace);
+  // Seeded from the warm index: the palette paints with rows already in it
+  // rather than showing an empty list that fills in a moment later.
+  const [files, setFiles] = useState<string[]>(() => cachedIndex(workspace?.id));
   const openFile = useWorkspace((s) => s.openFile);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -34,9 +38,15 @@ export function Palette({
     inputRef.current?.focus();
   }, []);
 
+  // Refresh behind the already-rendered list, so an ordinary open costs
+  // nothing and a changed tree still corrects itself within the frame.
   useEffect(() => {
     if (mode !== "files" || !workspace) return;
-    void ipc.workspaceIndex(workspace.id, false).then(setFiles).catch(() => setFiles([]));
+    let live = true;
+    void loadIndex(workspace.id).then((f) => live && setFiles(f));
+    return () => {
+      live = false;
+    };
   }, [mode, workspace?.id]);
 
   const rows = useMemo<Row[]>(() => {
