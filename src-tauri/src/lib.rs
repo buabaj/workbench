@@ -132,6 +132,8 @@ pub fn run() {
             commands::tasks::agent_resume_task,
             commands::tasks::chat_title,
             commands::tasks::note_action,
+            commands::tasks::note_generation_record,
+            commands::tasks::note_generations,
             commands::search::search_run,
             commands::search::search_replace,
             commands::pty::pty_open,

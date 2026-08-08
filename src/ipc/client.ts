@@ -41,6 +41,15 @@ export interface ImportOutcome {
   hasFullText: boolean;
 }
 
+export interface NoteGeneration {
+  id: string;
+  relPath: string;
+  model: string;
+  instruction: string;
+  text: string;
+  createdAt: number;
+}
+
 export interface NoteDoc {
   relPath: string;
   text: string;
@@ -446,6 +455,18 @@ export const ipc = {
   chatTurns: (taskId: string) => invoke<ChatTurnRow[]>("chat_turns", { taskId }),
   chatSessions: (workspaceId: string) => invoke<SessionSummary[]>("chat_sessions", { workspaceId }),
   chatDeleteSession: (taskId: string) => invoke<void>("chat_delete_session", { taskId }),
+
+  /** Record what a model wrote into a note — kept beside the note, not in it. */
+  noteGenerationRecord: (
+    workspaceId: string,
+    relPath: string,
+    model: string,
+    instruction: string,
+    text: string,
+  ) =>
+    invoke<void>("note_generation_record", { workspaceId, relPath, model, instruction, text }),
+  noteGenerations: (workspaceId: string, relPath: string) =>
+    invoke<NoteGeneration[]>("note_generations", { workspaceId, relPath }),
 
   /** Name a conversation from its opening exchange, using the internal model. */
   chatTitle: (taskId: string) => invoke<string>("chat_title", { taskId }),

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { frontmatterField } from "../research/frontmatter";
 import { appendAnnotation, parseAnnotations, type Annotation } from "../research/annotations";
-import { ProvenanceBar } from "../research/ProvenanceBar";
+import { editNote } from "../research/noteEdits";
 import { PdfView, type PdfSelection } from "../research/PdfView";
 import { SelectionBubble } from "../editor/SelectionBubble";
 import { useEditorSession } from "../editor/useEditorSession";
@@ -90,13 +90,16 @@ function AnnotationComposer({
   const save = async () => {
     if (!comment.trim()) return onDone(false);
     try {
-      const current = await ipc.fileRead(workspaceId, notePath);
-      const next = appendAnnotation(current.text, {
-        page: selection.page,
-        quote: selection.text,
-        comment: comment.trim(),
-      });
-      await ipc.fileWrite(workspaceId, notePath, next, current.contentHash);
+      // Through `editNote`, not a direct file write: if the note is open with
+      // unsaved changes, writing the file behind the editor discards them and
+      // the next save discards this. One path, whichever is authoritative.
+      await editNote(workspaceId, notePath, (text) =>
+        appendAnnotation(text, {
+          page: selection.page,
+          quote: selection.text,
+          comment: comment.trim(),
+        }),
+      );
       onDone(true);
     } catch (e) {
       setErr(formatError(e));
@@ -232,14 +235,6 @@ export function EditorPane() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       {phase === "conflict" && <ConflictBanner workspaceId={workspace.id} relPath={active} />}
-      {markdown && (
-        <ProvenanceBar
-          workspaceId={workspace.id}
-          relPath={active}
-          version={noteVersion}
-          onChanged={() => setNoteVersion((v) => v + 1)}
-        />
-      )}
       {pendingAnnotation && (
         <AnnotationComposer
           workspaceId={workspace.id}

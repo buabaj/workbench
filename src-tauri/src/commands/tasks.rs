@@ -917,3 +917,77 @@ pub async fn note_action(
         model_served: out.model_served,
     })
 }
+
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteGeneration {
+    pub id: String,
+    pub rel_path: String,
+    pub model: String,
+    pub instruction: String,
+    pub text: String,
+    pub created_at: i64,
+}
+
+/// Record what a model wrote into a note.
+///
+/// Outside the note deliberately. Marking generated prose inline was right
+/// about the risk and wrong about the remedy: it changed the shape of the
+/// document being written. The audit trail is kept here instead, where it
+/// costs the writing nothing.
+#[tauri::command]
+pub fn note_generation_record(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    rel_path: String,
+    model: String,
+    instruction: String,
+    text: String,
+) -> Result<(), AppError> {
+    let conn = state.db.lock().expect("db lock");
+    conn.execute(
+        "INSERT INTO note_generations
+           (id, workspace_id, rel_path, model, instruction, text, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![
+            ulid::Ulid::new().to_string(),
+            workspace_id,
+            rel_path,
+            model,
+            instruction,
+            text,
+            now_ms()
+        ],
+    )?;
+    Ok(())
+}
+
+/// Everything a model has written into a note, most recent first.
+#[tauri::command]
+pub fn note_generations(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    rel_path: String,
+) -> Result<Vec<NoteGeneration>, AppError> {
+    let conn = state.db.lock().expect("db lock");
+    let mut stmt = conn.prepare(
+        "SELECT id, rel_path, model, instruction, text, created_at
+           FROM note_generations
+          WHERE workspace_id = ?1 AND rel_path = ?2
+          ORDER BY created_at DESC LIMIT 100",
+    )?;
+    let rows = stmt
+        .query_map(rusqlite::params![workspace_id, rel_path], |r| {
+            Ok(NoteGeneration {
+                id: r.get(0)?,
+                rel_path: r.get(1)?,
+                model: r.get(2)?,
+                instruction: r.get(3)?,
+                text: r.get(4)?,
+                created_at: r.get(5)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}

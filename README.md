@@ -157,27 +157,15 @@ saved into the note and marked in the page's margin. Type `[[` in any note to
 link to another, and **Backlinks** shows both directions.
 
 **`@agent[…]`** written inside a note runs on ⌘↵ and is replaced by the answer.
-Generated prose is **marked** in the file so it never becomes indistinguishable
-from your own writing — see below.
+What the model wrote is recorded separately, so there is a trail without the
+note being altered — see below.
 
-### Provenance
+### What a model wrote
 
-Text a model wrote is wrapped in HTML comments recording which model and when:
-
-```markdown
-<!-- agent deepseek/deepseek-v4-flash 2026-08-08 -->
-The reward model is trained on preference pairs sampled from the policy.
-<!-- /agent -->
-```
-
-Invisible wherever markdown is rendered, so the note still reads normally in
-Obsidian — but Workbench shows it with a clay rule while you write, and a bar
-above the editor counts how much of the note you have not verified.
-
-**Accept** strips the markers: you have read it, checked it, and stand behind
-it, so it becomes yours. Never automatic. The distinction the file records is
-"verified by me" against "asserted by a model", which is the distinction that
-matters when you cite it.
+`@agent[…]` puts clean prose in your note — no markers, no change to the shape
+of what you are writing. What it wrote is recorded beside the note instead, in
+the database: the model, the instruction, the text and the time. The audit
+exists without the document paying for it.
 
 ### Shortcuts
 

@@ -5,6 +5,7 @@
  * folds, selection).
  */
 import type { EditorState } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
 
 export interface EditorSession {
   state: EditorState;
@@ -15,6 +16,17 @@ export interface EditorSession {
 
 const sessions = new Map<string, EditorSession>();
 
+/**
+ * The MOUNTED view for a path, when there is one.
+ *
+ * Separate from the stashed state because a background task must be able to
+ * find whichever view is current at the moment it finishes, rather than the
+ * one it captured when it started. Holding a captured view across an await
+ * meant a tab switch left the result dispatching into a destroyed editor —
+ * the note kept the placeholder forever and the work was lost.
+ */
+const liveViews = new Map<string, EditorView>();
+
 export const editorRegistry = {
   get: (key: string) => sessions.get(key),
   set: (key: string, session: EditorSession) => sessions.set(key, session),
@@ -22,6 +34,22 @@ export const editorRegistry = {
     const s = sessions.get(key);
     if (s) s.diskHash = hash;
   },
-  delete: (key: string) => sessions.delete(key),
-  clear: () => sessions.clear(),
+  delete: (key: string) => {
+    liveViews.delete(key);
+    return sessions.delete(key);
+  },
+  clear: () => {
+    liveViews.clear();
+    sessions.clear();
+  },
+
+  /** Called by the editor as it mounts and unmounts. */
+  bindView: (key: string, view: EditorView) => liveViews.set(key, view),
+  unbindView: (key: string, view: EditorView) => {
+    // Only if it is still ours: a remount can register the new view before
+    // the old one's cleanup runs, and unbinding blindly would drop the live
+    // one and leave later edits with nowhere to land.
+    if (liveViews.get(key) === view) liveViews.delete(key);
+  },
+  liveView: (key: string) => liveViews.get(key),
 };

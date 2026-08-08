@@ -6,7 +6,7 @@ import { editorRegistry } from "./editorRegistry";
 import { applyLanguage, codeExtensions, markdownExtras } from "./extensions";
 import { formatError, ipc, onFsChanged } from "../ipc/client";
 import { directiveAt } from "../research/agentDirective";
-import { markGenerated } from "../research/provenance";
+import { replaceMarker } from "../research/noteEdits";
 import { useLinks } from "../store/links";
 import { saveBuffer, useWorkspace } from "../store/workspace";
 
@@ -100,41 +100,44 @@ export function useEditorSession(workspaceId: string, relPath: string) {
         return true;
       };
 
+      /**
+       * Run a directive and put the answer where it stood.
+       *
+       * Nothing here holds the view across the await. The placeholder is
+       * written and SAVED first, so it exists on disk as well as in the
+       * editor; when the answer arrives it is matched by text through
+       * `replaceMarker`, which finds whichever view is current or falls back
+       * to the file. Capturing the view meant a tab switch left the note
+       * showing "…thinking" forever with the result thrown away.
+       */
       const execute = async (
         view: EditorView,
         text: string,
         d: { instruction: string; start: number; end: number },
       ) => {
-        const busy = "…thinking";
-        view.dispatch({ changes: { from: d.start, to: d.end, insert: busy } });
+        // Unique per run, so two directives in flight cannot claim each
+        // other's answer.
+        const token = `…thinking(${Math.random().toString(36).slice(2, 8)})`;
+        view.dispatch({ changes: { from: d.start, to: d.end, insert: token } });
+        await saveBuffer(relPath, () => view.state.doc.toString()).catch(() => {});
+
         try {
           const out = await ipc.noteAction(workspaceId, d.instruction, text);
-          const at = view.state.doc.toString().indexOf(busy, Math.max(0, d.start - 4));
-          if (at === -1) return; // the document moved on; leave it alone
-          // Marked, not bare. Unmarked model output becomes indistinguishable
-          // from your own writing the moment you close the file, and there is
-          // no record to reconstruct it from later.
-          const marked = markGenerated(
-            out.text,
-            out.modelServed,
-            new Date().toISOString().slice(0, 10),
-          );
-          view.dispatch({ changes: { from: at, to: at + busy.length, insert: marked } });
-        } catch (e) {
-          // The reason goes IN THE NOTE, beside the restored directive.
-          // Sending it to the console instead meant a missing key or a network
-          // error looked exactly like the keystroke doing nothing at all —
-          // which is the worst of the three things it could look like.
-          const at = view.state.doc.toString().indexOf(busy, Math.max(0, d.start - 4));
-          if (at !== -1) {
-            view.dispatch({
-              changes: {
-                from: at,
-                to: at + busy.length,
-                insert: `@agent[${d.instruction}]\n\n> agent failed: ${formatError(e)}`,
-              },
-            });
+          const landed = await replaceMarker(workspaceId, relPath, token, out.text.trim());
+          if (landed) {
+            // The record of what a model wrote lives outside the prose, so
+            // the note keeps the shape you gave it.
+            void ipc
+              .noteGenerationRecord(workspaceId, relPath, out.modelServed, d.instruction, out.text)
+              .catch(() => {});
           }
+        } catch (e) {
+          await replaceMarker(
+            workspaceId,
+            relPath,
+            token,
+            `@agent[${d.instruction}]\n\n> agent failed: ${formatError(e)}`,
+          ).catch(() => {});
         }
       };
 
@@ -184,6 +187,9 @@ export function useEditorSession(workspaceId: string, relPath: string) {
           });
         view = new EditorView({ state, parent: node });
         viewRef.current = view;
+        // Reachable by path, so a background task can find the CURRENT view
+        // when it finishes rather than the one it started with.
+        editorRegistry.bindView(relPath, view);
         if (saved) {
           view.scrollDOM.scrollTop = saved.scrollTop;
         } else {
@@ -212,6 +218,7 @@ export function useEditorSession(workspaceId: string, relPath: string) {
       return () => {
         disposed = true;
         if (view) {
+          editorRegistry.unbindView(relPath, view);
           editorRegistry.set(relPath, {
             state: view.state,
             scrollTop: view.scrollDOM.scrollTop,
