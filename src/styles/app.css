@@ -397,6 +397,9 @@ body {
 .btn.primary:hover:not(:disabled) { background: var(--ink-secondary); border-color: var(--ink-secondary); }
 .btn.quiet { border-color: transparent; color: var(--ink-muted); }
 .btn.quiet:hover:not(:disabled) { background: var(--raised); color: var(--ink); border-color: transparent; }
+/* For dialog rows, where three choices have to fit on one line and the buttons
+   should not shout louder than the question above them. */
+.btn.small { padding: 4px 10px; font-size: var(--text-xs); white-space: nowrap; }
 .btn.icon { padding: 6px; border-color: transparent; color: var(--ink-muted); }
 .btn.icon:hover:not(:disabled) { background: var(--raised); color: var(--ink); border-color: transparent; }
 .btn.recording { color: var(--error); border-color: var(--error); }

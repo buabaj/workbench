@@ -124,7 +124,7 @@ export function QuitGuard() {
           {/* Cancel first and focused: the safe choice should be the easy one,
               and it is the only one that loses nothing. */}
           <button
-            className="btn"
+            className="btn small"
             autoFocus
             disabled={busy}
             onClick={() => {
@@ -135,14 +135,14 @@ export function QuitGuard() {
             Keep working
           </button>
           <button
-            className="btn"
+            className="btn small"
             disabled={busy}
             style={{ color: "var(--error)", borderColor: "var(--error)" }}
             onClick={() => void ipc.confirmQuit().catch(() => {})}
           >
             Quit without saving
           </button>
-          <button className="btn primary" disabled={busy} onClick={() => void saveAllAndQuit()}>
+          <button className="btn primary small" disabled={busy} onClick={() => void saveAllAndQuit()}>
             {busy ? "Saving…" : "Save all and quit"}
           </button>
         </div>

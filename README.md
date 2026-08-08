@@ -149,6 +149,19 @@ bubble offers to send it to the agent. The **Changes** tab lists uncommitted
 work and opens diffs side by side. There is no stage or commit — that stays in
 the terminal, where you already do it.
 
+The file tree colours changed files the way git sees them — new, modified,
+deleted — and marks a collapsed folder that hides changes, so you do not have to
+open one to find out. Switching tabs reveals that file in the tree. Right-click
+for rename, duplicate, copy path, reveal in Finder, or move to Trash; arrow keys
+walk the tree and open things without the mouse. Gitignored files and dotfiles
+are shown, because `.env` is a file you edit.
+
+**Queued prompts.** Type and press ↵ while the agent is working and the message
+joins a queue below the composer instead of being refused. Each item keeps the
+mode or command it was typed under — `/explain this` then `/plan that` run as an
+explain and a plan — and any of them can be edited or removed until it starts. If
+a turn fails or you stop it, the queue holds rather than feeding a broken agent.
+
 **Research mode.** **Find papers** searches OpenAlex; adding one writes a
 markdown note with the metadata, abstract and extracted full text, and downloads
 the PDF when it is open access. Toggle **PDF** on a paper note to read it.
@@ -156,16 +169,13 @@ Highlight a passage to ask the agent about it or annotate it — annotations are
 saved into the note and marked in the page's margin. Type `[[` in any note to
 link to another, and **Backlinks** shows both directions.
 
-**`@agent[…]`** written inside a note runs on ⌘↵ and is replaced by the answer.
-What the model wrote is recorded separately, so there is a trail without the
-note being altered — see below.
+**`@agent[…]`** written inside a note runs on ⌘↵ and is replaced by the answer —
+clean prose, no markers and no change to the shape of what you are writing. If it
+fails, the reason is written where the answer would have gone rather than
+swallowed.
 
-### What a model wrote
-
-`@agent[…]` puts clean prose in your note — no markers, no change to the shape
-of what you are writing. What it wrote is recorded beside the note instead, in
-the database: the model, the instruction, the text and the time. The audit
-exists without the document paying for it.
+**Unsaved work survives quitting.** ⌘Q with a dirty buffer asks first, and can
+save everything and then quit.
 
 ### Shortcuts
 
@@ -181,6 +191,7 @@ exists without the document paying for it.
 | `⌘⇧V` | start or stop dictation |
 | `⌘⇧]` `⌘⇧[` | next / previous tab |
 | `⌘W` | close tab |
+| `↑` `↓` `←` `→` | move through the file tree, open, collapse |
 | `⌘,` | settings |
 
 ---
@@ -203,6 +214,9 @@ exists without the document paying for it.
 - No Developer ID signing, so Gatekeeper warns and the Keychain re-prompts after
   each rebuild.
 - No graph view for the note vault; backlinks are a list.
+- The unsaved-changes prompt covers ⌘Q and closing the window. Quitting from the
+  Dock or logging out still discards unsaved work: macOS delivers no event there
+  that can be held (measured — see the comment in `src-tauri/src/lib.rs`).
 - Three capabilities appear in Settings but are not implemented:
   `transcript.cleanup`, `research.summarize`, `links.suggest`.
 - Untested on Intel Macs and on anything but macOS.
