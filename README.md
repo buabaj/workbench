@@ -122,16 +122,9 @@ another provider.
 Six small things use a model directly rather than the coding agent — no tools,
 no file access, one request and one answer:
 
-| | |
-|---|---|
-| Voice transcription | ⌘⇧V dictation |
-| Transcript cleanup | fillers and punctuation, before the words land |
-| Conversation titles | naming a chat from its opening exchange |
-| Inline note actions | `@agent[…]` inside a note |
-| Summarize | a paper note, on request |
-| Suggest links | `[[links]]` this note might belong with |
-
-They need an [OpenRouter](https://openrouter.ai) key:
+voice transcription, transcript cleanup, conversation titles, `@agent[…]` in
+notes, Summarize, and Suggest links. [Using them](#the-built-in-ai) is below;
+they need an [OpenRouter](https://openrouter.ai) key:
 
 ```bash
 mkdir -p ~/.config/workbench
@@ -199,6 +192,52 @@ swallowed.
 
 **Unsaved work survives quitting.** ⌘Q with a dirty buffer asks first, and can
 save everything and then quit.
+
+### The built-in AI
+
+Separate from the coding agent and from each other: no tools, no file access,
+one request and one answer. Three happen around what you are already doing;
+three you trigger. **None of them writes to a note without a click.**
+
+| Around the chat | how |
+|---|---|
+| **Conversation titles** | nothing to do — after the first full exchange, a chat names itself in the Conversations list |
+| **Voice transcription** | `⌘⇧V` in the chat composer, speak, `⌘⇧V` again |
+| **Transcript cleanup** | automatic, in that same pause, before the words appear |
+
+Dictation lands **in the composer, not sent** — you edit it and send it
+yourself, and there is deliberately no path from speaking to starting a task.
+The composer is the only place it lands; there is no dictate-into-a-note.
+Cleanup takes out the fillers and puts in the punctuation, and if it fails,
+times out, or answers you instead of tidying, you get the raw transcript
+instead and lose nothing.
+
+| You ask | where |
+|---|---|
+| **`@agent[…]`** | write it in a `.md` file, put the cursor inside, press `⌘↵` |
+| **Summarize** | research mode → **Backlinks**, with a note open |
+| **Suggest links** | research mode → **Backlinks**, with a note open |
+
+`@agent[rewrite this paragraph as a claim]` is replaced by the answer where it
+stood. If it fails, the reason is written there instead of being swallowed.
+
+**Summarize** reads what is on screen — the editor's text, not the last save —
+and shows the result in the panel. It becomes a `## Summary` section only when
+you press Insert, and asking again replaces that section rather than adding a
+second one.
+
+**Suggest links** proposes up to six notes this one belongs with, each with a
+line on why, skipping the note itself and anything it already links to. **Link**
+adds `- [[Name]]` under a `## Related` heading; clicking the name opens that
+note instead. The model chooses only from notes that exist, so a suggestion can
+never invent one.
+
+Both are research mode only — the Backlinks tab is not in the code rail.
+
+**Settings → Built-in AI** lists all six with the model chain each will use, and
+changes any of them. A `→` in a chain is a fallback: if the first model is down
+the next answers, which is normal rather than a fault. With no key, all six
+quietly do nothing and the rest of the app is unaffected.
 
 ### Shortcuts
 
