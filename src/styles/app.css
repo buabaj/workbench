@@ -708,3 +708,16 @@ body {
   font-size: 8px;
   line-height: 1;
 }
+
+/* Tabs scroll; the new-conversation button does not. The scrollbar itself is
+   hidden — in a 34px strip it costs more height than it gives, and the tabs
+   are reachable by ⌘⇧[ and ⌘⇧] as well as by dragging. */
+.tab-scroll {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab-scroll::-webkit-scrollbar { display: none; }

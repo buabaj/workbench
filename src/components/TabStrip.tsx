@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { GitCompare } from "lucide-react";
 import { Plus, X } from "lucide-react";
 import { ButterflyMark } from "./ButterflyMark";
@@ -24,8 +25,16 @@ function TabButton({ tab }: { tab: Tab }) {
   const label = tab.kind === "diff" ? `${name} — diff` : name;
   const closable = tab.kind !== "chat";
 
+  const ref = useRef<HTMLDivElement | null>(null);
+  // Cycling with ⌘⇧] past the edge of the strip would otherwise select a tab
+  // you cannot see.
+  useEffect(() => {
+    if (active) ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
+
   return (
     <div
+      ref={ref}
       role="tab"
       aria-selected={active}
       aria-label={`${label}${phase === "dirty" ? ", unsaved" : ""}`}
@@ -54,6 +63,7 @@ function TabButton({ tab }: { tab: Tab }) {
         whiteSpace: "nowrap",
         cursor: "default",
         maxWidth: 200,
+        flexShrink: 0,
         lineHeight: 1,
         minHeight: 26,
       }}
@@ -99,24 +109,29 @@ function TabButton({ tab }: { tab: Tab }) {
 export function TabStrip({ onNewConversation }: { onNewConversation: () => void }) {
   const tabs = useLayout((s) => s.tabs);
   return (
+    // The scrolling region holds only the tabs. With the button inside it,
+    // `margin-left: auto` scrolled away the moment there were enough tabs to
+    // overflow — so the one control that is always wanted was the first thing
+    // to disappear.
     <div
-      role="tablist"
-      aria-label="Open tabs"
       style={{
         display: "flex",
+        alignItems: "center",
         gap: 2,
         padding: "var(--s-2) var(--s-3)",
         borderBottom: "1px solid var(--border)",
-        overflowX: "auto",
         flexShrink: 0,
+        minWidth: 0,
       }}
     >
-      {tabs.map((t) => (
-        <TabButton key={t.id} tab={t} />
-      ))}
+      <div className="tab-scroll" role="tablist" aria-label="Open tabs">
+        {tabs.map((t) => (
+          <TabButton key={t.id} tab={t} />
+        ))}
+      </div>
       <button
         className="btn icon"
-        style={{ marginLeft: "auto" }}
+        style={{ flexShrink: 0 }}
         onClick={onNewConversation}
         aria-label="New conversation"
         title="New conversation — ends the current agent session"

@@ -22,6 +22,17 @@ use agent::supervisor::Supervisor;
 use creds::keychain::Keychain;
 
 pub struct AppState {
+    /// Set once the frontend has dealt with unsaved work and agreed to quit.
+    ///
+    /// Without it the exit handler would prevent its own second attempt and
+    /// the app could never close.
+    pub quit_confirmed: Arc<std::sync::atomic::AtomicBool>,
+    /// Set when the frontend says it is showing the unsaved-work dialog.
+    ///
+    /// A guard that can hold the exit must be able to prove someone is going
+    /// to answer. Without this, a window that never registered the listener —
+    /// a failed load, a crashed renderer — would make the app unquittable.
+    pub quit_acked: Arc<std::sync::atomic::AtomicBool>,
     pub db: Arc<Mutex<rusqlite::Connection>>,
     pub keychain: Arc<dyn Keychain>,
     pub supervisor: Arc<Supervisor>,
@@ -79,6 +90,8 @@ pub fn run() {
                 keychain: Arc::new(creds::keychain::MacKeychain),
                 supervisor: Arc::new(Supervisor::default()),
                 ptys: Arc::new(crate::pty::PtyRegistry::default()),
+                quit_confirmed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                quit_acked: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             });
             Ok(())
         })
@@ -114,6 +127,8 @@ pub fn run() {
             commands::scholar::paper_import,
             commands::workspace::file_create,
             commands::workspace::dir_create,
+            commands::workspace::confirm_quit,
+            commands::workspace::quit_ack,
             commands::workspace::path_rename,
             commands::workspace::path_duplicate,
             commands::workspace::path_trash,
@@ -167,6 +182,52 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                // Ask before discarding unsaved work.
+                //
+                // Only the frontend knows which buffers are dirty, so the
+                // decision needs a round trip: hold the exit, tell the window,
+                // and let `confirm_quit` come back when the user has chosen.
+                // Everything below — agents, shells, recordings — is teardown
+                // that must still happen, but only once quitting is settled.
+                if let Some(state) = app.try_state::<AppState>() {
+                    if !state
+                        .quit_confirmed
+                        .load(std::sync::atomic::Ordering::SeqCst)
+                    {
+                        use tauri::Emitter;
+                        // If the window cannot be told, there is nobody to ask
+                        // and holding the exit would trap the app open.
+                        // Each attempt stands alone. Left set from a previous
+                        // prompt that was dismissed, this would disarm the
+                        // backstop for every quit after it.
+                        state
+                            .quit_acked
+                            .store(false, std::sync::atomic::Ordering::SeqCst);
+                        if app.emit("app://quit-requested", ()).is_ok() {
+                            api.prevent_exit();
+
+                            // Backstop. If nothing answers, quit anyway: a
+                            // guard that can hold the exit open forever is
+                            // worse than the unsaved work it protects.
+                            let confirmed = state.quit_confirmed.clone();
+                            let acked = state.quit_acked.clone();
+                            let handle = app.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_secs(3));
+                                use std::sync::atomic::Ordering::SeqCst;
+                                if confirmed.load(SeqCst) || acked.load(SeqCst) {
+                                    return; // answered, or a dialog is up
+                                }
+                                tracing::warn!("no answer to the quit prompt; exiting");
+                                confirmed.store(true, SeqCst);
+                                handle.exit(0);
+                            });
+                            return;
+                        }
+                    }
+                }
+            }
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 // Graceful, and worth the wait: a killed agent survives us
                 // (it leaves our process group) and would keep running with a

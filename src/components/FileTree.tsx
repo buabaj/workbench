@@ -8,6 +8,25 @@ import type { TreeState } from "../vcs/treeStatus";
 import { useComposer } from "../store/composer";
 import { FileContextMenu } from "./FileContextMenu";
 
+/**
+ * Focus the next or previous row in the tree.
+ *
+ * Read from the DOM rather than reconstructed from the store: the rendered
+ * order already accounts for which folders are open and how the children were
+ * sorted, and rebuilding that here would be a second source of truth that
+ * drifts from what is on screen.
+ */
+function moveFocus(from: HTMLElement, delta: 1 | -1): void {
+  const tree = from.closest('[role="tree"]');
+  if (!tree) return;
+  const rows = Array.from(tree.querySelectorAll<HTMLElement>('[role="treeitem"]'));
+  const at = rows.indexOf(from);
+  const next = rows[at + delta];
+  if (!next) return;
+  next.focus();
+  next.scrollIntoView({ block: "nearest" });
+}
+
 function parentOf(relPath: string): string {
   const i = relPath.lastIndexOf("/");
   return i === -1 ? "" : relPath.slice(0, i);
@@ -194,6 +213,15 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
       toggleDir(node.relPath);
     } else if (e.key === "ArrowLeft" && node.isDir && expanded) {
       toggleDir(node.relPath);
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      // Move between rows. Arrows only opened and closed folders before, so
+      // the tree could not be walked without a mouse — and a file manager you
+      // cannot walk with the keyboard is one you always reach for the mouse in.
+      e.preventDefault();
+      moveFocus(e.currentTarget as HTMLElement, e.key === "ArrowDown" ? 1 : -1);
+    } else if (e.key === "F2") {
+      e.preventDefault();
+      setRenaming(true);
     }
   };
 

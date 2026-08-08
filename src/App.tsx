@@ -27,6 +27,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FileTree } from "./components/FileTree";
 import { Palette, type PaletteMode } from "./components/Palette";
 import { QueuedList } from "./components/QueuedList";
+import { QuitGuard } from "./components/QuitGuard";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { SessionsPanel } from "./components/SessionsPanel";
 import { SettingsView } from "./components/SettingsView";
@@ -773,6 +774,7 @@ export default function App() {
       )}
 
       {palette && <Palette mode={palette} onClose={() => setPalette(null)} />}
+      <QuitGuard />
     </div>
   );
 }

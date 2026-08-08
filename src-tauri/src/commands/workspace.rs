@@ -318,6 +318,29 @@ pub fn file_read_bytes(
     Ok(tauri::ipc::Response::new(std::fs::read(p.abs())?))
 }
 
+/// Proceed with quitting, now that unsaved work has been dealt with.
+///
+/// The exit handler holds the first attempt and asks the window; this is the
+/// answer. Setting the flag before exiting is what stops the handler from
+/// preventing its own second attempt and trapping the app open.
+#[tauri::command]
+pub fn confirm_quit(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), AppError> {
+    state
+        .quit_confirmed
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    app.exit(0);
+    Ok(())
+}
+
+/// Tell the exit handler a dialog is up, so its backstop does not fire.
+#[tauri::command]
+pub fn quit_ack(state: State<'_, AppState>) -> Result<(), AppError> {
+    state
+        .quit_acked
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
 /// Rename or move a file or directory within the workspace.
 ///
 /// Both paths go through `resolve`, so neither the source nor the destination

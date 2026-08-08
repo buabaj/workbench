@@ -372,6 +372,10 @@ export const ipc = {
     invoke<BranchState>("worktree_branch", { workspaceId }),
   worktreePatch: (workspaceId: string, relPath: string) =>
     invoke<string>("worktree_patch", { workspaceId, relPath }),
+  /** Proceed with quitting; the exit handler is holding for this. */
+  confirmQuit: () => invoke<void>("confirm_quit"),
+  /** Tell the exit handler a dialog is up, so its backstop does not fire. */
+  quitAck: () => invoke<void>("quit_ack"),
   pathRename: (workspaceId: string, from: string, to: string) =>
     invoke<void>("path_rename", { workspaceId, from, to }),
   pathDuplicate: (workspaceId: string, from: string, to: string) =>
