@@ -57,10 +57,28 @@ export type Phase =
   | "complete"
   | "failed";
 
+/**
+ * A prompt typed while the agent was busy, waiting its turn.
+ *
+ * It carries the mode and command that were active when you TYPED it, not
+ * whatever happens to be set when it runs. Composing at drain time would give
+ * every queued item the last template you picked — so `/explain this` followed
+ * by `/plan that` would run as two plans.
+ */
+export interface QueuedPrompt {
+  id: string;
+  text: string;
+  mode: PromptTemplate | null;
+  oneShot: PromptTemplate | null;
+}
+
 interface ChatStore {
   /** One conversation == one task_id == one agent session. */
   taskId: string | null;
   workspaceId: string | null;
+  /** Kept so a queued prompt can resolve `@file` mentions when it drains,
+   *  long after the send that supplied it returned. */
+  workspaceRoot: string | null;
   turns: Turn[];
   status: ChatStatus;
   phase: Phase;
@@ -70,9 +88,17 @@ interface ChatStore {
   mode: PromptTemplate | null;
   /** Applies to the next message only. */
   oneShot: PromptTemplate | null;
+  /** Typed while a turn was running; drains when it finishes. */
+  queue: QueuedPrompt[];
+  /** Held rather than drained — a turn failed or was stopped. */
+  queuePaused: boolean;
 
   setMode(t: PromptTemplate | null): void;
   setOneShot(t: PromptTemplate | null): void;
+  editQueued(id: string, text: string): void;
+  setQueuedTemplates(id: string, mode: PromptTemplate | null, oneShot: PromptTemplate | null): void;
+  removeQueued(id: string): void;
+  resumeQueue(): void;
   refreshProfile(workspaceId: string | null): Promise<void>;
   send(workspaceId: string, text: string, workspaceRoot?: string): Promise<void>;
   stop(force: boolean): Promise<void>;
@@ -106,9 +132,132 @@ async function persistAll(taskId: string, turns: Turn[]) {
   }
 }
 
+/**
+ * Send one prompt, now. Never queues — the drain calls this, and a drain that
+ * could re-queue would never empty.
+ *
+ * Composes with the prompt's OWN captured templates, so a queued `/explain`
+ * stays an explain even if the mode changed while it waited.
+ */
+async function sendNow(
+  set: Set,
+  get: Get,
+  workspaceId: string,
+  item: QueuedPrompt,
+  workspaceRoot?: string,
+): Promise<void> {
+  const { taskId, status, turns } = get();
+  const { text, mode, oneShot } = item;
+
+  // Workspace orientation is not attached here: it lives in the agent's system
+  // prompt (see `workspace_context`), so it holds for every turn and after a
+  // resume rather than only the first message.
+  //
+  // The agent receives the composed instruction; the transcript shows what the
+  // user actually typed, so history stays readable. `@file` mentions resolve to
+  // absolute paths for the agent while staying as written in the transcript.
+  //
+  // The templates come from the ITEM, so a queued prompt runs under the mode it
+  // was typed under even if the mode has changed since.
+  const footer = workspaceRoot ? referenceFooter(text, workspaceRoot) : "";
+  const composed = footer
+    ? `${composeMessage(text, mode, oneShot)}\n\n${footer}`
+    : composeMessage(text, mode, oneShot);
+  set({ oneShot: null });
+
+  const userTurn: Turn = { id: nextId(), role: "user", text, tools: [], streaming: false };
+  const assistantTurn: Turn = {
+    id: nextId(),
+    role: "assistant",
+    text: "",
+    tools: [],
+    streaming: true,
+  };
+  set({ turns: [...turns, userTurn, assistantTurn], status: "streaming", phase: "thinking" });
+
+  // A live session takes a follow-up. Starting a new task per message would
+  // leave the previous agent process running — the supervisor only drops a task
+  // when its own process exits.
+  //
+  // No `steer` branch: this is only reached when no turn is in flight, because
+  // `send` queues in that case and the drain runs after `agent_end`.
+  if (taskId && status === "awaiting-input") {
+    try {
+      await ipc.agentSend(taskId, "follow_up", composed);
+      void persistAll(taskId, get().turns);
+    } catch (e) {
+      get().turns[get().turns.length - 1].error = formatError(e);
+      set({ status: "failed", phase: "failed", turns: [...get().turns], queuePaused: true });
+    }
+    return;
+  }
+
+  // A conversation reopened from history has a task id but no live process: its
+  // agent exited when the app closed. Reattach to that same session rather than
+  // falling through to agent_start_task, which would mint a new id and silently
+  // strand everything said before.
+  if (taskId && status === "idle") {
+    set({ status: "starting", phase: "starting", workspaceId });
+    const channel = new Channel<TaskStreamEnvelope>();
+    channel.onmessage = (envelope) => reduce(envelope.item, set, get);
+    try {
+      await invoke<TaskView>("agent_resume_task", { taskId, channel });
+      // `prompt`, not `follow_up`: a just-resumed agent is idle, with the saved
+      // history already loaded. Verified against a live agent — it answers from
+      // the restored conversation, not from a blank one.
+      await ipc.agentSend(taskId, "prompt", composed);
+      set({ status: "streaming", phase: "thinking" });
+      void persistAll(taskId, get().turns);
+    } catch (e) {
+      const t = [...get().turns];
+      t[t.length - 1] = { ...t[t.length - 1], error: formatError(e), streaming: false };
+      set({ turns: t, status: "failed", phase: "failed", queuePaused: true });
+    }
+    return;
+  }
+
+  set({ status: "starting", phase: "starting", workspaceId });
+  const channel = new Channel<TaskStreamEnvelope>();
+  channel.onmessage = (envelope) => reduce(envelope.item, set, get);
+
+  try {
+    const view = await invoke<TaskView>("agent_start_task", {
+      workspaceId,
+      prompt: composed,
+      profileOverride: null,
+      channel,
+    });
+    set({ taskId: view.id, status: "streaming" });
+    // Flush whatever has already streamed in while the invoke was in flight.
+    void persistAll(view.id, get().turns);
+  } catch (e) {
+    const t = [...get().turns];
+    t[t.length - 1] = { ...t[t.length - 1], error: formatError(e), streaming: false };
+    set({ turns: t, status: "failed", phase: "failed", queuePaused: true });
+  }
+}
+
+/**
+ * Start the next queued prompt, if the agent is free to take one.
+ *
+ * Called from `agent_end` rather than a timer, so the next prompt begins
+ * exactly when the agent is ready and never before.
+ */
+function drainQueue(set: Set, get: Get): void {
+  const { queue, queuePaused, workspaceId, status } = get();
+  if (queuePaused || queue.length === 0 || !workspaceId) return;
+  if (status === "starting" || status === "streaming") return;
+
+  const [next, ...rest] = queue;
+  set({ queue: rest });
+  void sendNow(set, get, workspaceId, next, get().workspaceRoot ?? undefined);
+}
+
+
 export const useChat = create<ChatStore>((set, get) => ({
   taskId: null,
   workspaceId: null,
+  workspaceRoot: null,
   turns: [],
   status: "idle",
   phase: "idle",
@@ -116,9 +265,25 @@ export const useChat = create<ChatStore>((set, get) => ({
   profileMissing: false,
   mode: null,
   oneShot: null,
+  queue: [],
+  queuePaused: false,
 
   setMode: (t) => set({ mode: t }),
   setOneShot: (t) => set({ oneShot: t }),
+
+  editQueued: (id, text) =>
+    set((s) => ({ queue: s.queue.map((q) => (q.id === id ? { ...q, text } : q)) })),
+
+  setQueuedTemplates: (id, mode, oneShot) =>
+    set((s) => ({ queue: s.queue.map((q) => (q.id === id ? { ...q, mode, oneShot } : q)) })),
+
+  removeQueued: (id) => set((s) => ({ queue: s.queue.filter((q) => q.id !== id) })),
+
+  /** Unpause and start the head immediately, if the agent is free. */
+  resumeQueue: () => {
+    set({ queuePaused: false });
+    drainQueue(set, get);
+  },
 
   refreshProfile: async (workspaceId) => {
     try {
@@ -129,90 +294,25 @@ export const useChat = create<ChatStore>((set, get) => ({
   },
 
   send: async (workspaceId, text, workspaceRoot) => {
-    const { taskId, status, turns, mode, oneShot } = get();
+    const { status, mode, oneShot } = get();
 
-    // Workspace orientation is no longer attached here: it lives in the
-    // agent's system prompt (see `workspace_context`), so it holds for every
-    // turn and after a resume instead of only the first message.
-    //
-    // The agent receives the composed instruction; the transcript shows what
-    // the user actually typed, so history stays readable. `@file` mentions are
-    // resolved to absolute paths for the agent while staying as the user wrote
-    // them in the transcript.
-    const footer = workspaceRoot ? referenceFooter(text, workspaceRoot) : "";
-    const composed = footer
-      ? `${composeMessage(text, mode, oneShot)}\n\n${footer}`
-      : composeMessage(text, mode, oneShot);
-    set({ oneShot: null });
-
-    const userTurn: Turn = { id: nextId(), role: "user", text, tools: [], streaming: false };
-    const assistantTurn: Turn = {
-      id: nextId(),
-      role: "assistant",
-      text: "",
-      tools: [],
-      streaming: true,
-    };
-    set({ turns: [...turns, userTurn, assistantTurn], status: "streaming", phase: "thinking" });
-
-    // A live session takes a follow-up. Starting a new task per message would
-    // leave the previous agent process running — the supervisor only drops a
-    // task when its own process exits.
-    if (taskId && (status === "awaiting-input" || status === "streaming")) {
-      const command = status === "streaming" ? "steer" : "follow_up";
-      try {
-        await ipc.agentSend(taskId, command, composed);
-        void persistAll(taskId, get().turns);
-      } catch (e) {
-        get().turns[get().turns.length - 1].error = formatError(e);
-        set({ status: "failed", phase: "failed", turns: [...get().turns] });
-      }
+    // A turn is running: queue it rather than blocking or interrupting.
+    // The templates are captured HERE, not at drain time, so each queued item
+    // runs under the mode and command that were active when it was typed.
+    // `oneShot` is cleared for the same reason it is on send — the next thing
+    // typed starts clean.
+    if (status === "starting" || status === "streaming") {
+      set((s) => ({
+        workspaceRoot: workspaceRoot ?? s.workspaceRoot,
+        queue: [...s.queue, { id: nextId(), text, mode, oneShot }],
+        oneShot: null,
+        // Queuing is an intent to continue, so it lifts a pause.
+        queuePaused: false,
+      }));
       return;
     }
-
-    // A conversation reopened from history has a task id but no live process:
-    // its agent exited when the app closed. Reattach to that same session
-    // rather than falling through to agent_start_task, which would mint a new
-    // id and silently strand everything said before.
-    if (taskId && status === "idle") {
-      set({ status: "starting", phase: "starting", workspaceId });
-      const channel = new Channel<TaskStreamEnvelope>();
-      channel.onmessage = (envelope) => reduce(envelope.item, set, get);
-      try {
-        await invoke<TaskView>("agent_resume_task", { taskId, channel });
-        // `prompt`, not `follow_up`: a just-resumed agent is idle, with the
-        // saved history already loaded. Verified against a live agent — it
-        // answers from the restored conversation, not from a blank one.
-        await ipc.agentSend(taskId, "prompt", composed);
-        set({ status: "streaming", phase: "thinking" });
-        void persistAll(taskId, get().turns);
-      } catch (e) {
-        const t = [...get().turns];
-        t[t.length - 1] = { ...t[t.length - 1], error: formatError(e), streaming: false };
-        set({ turns: t, status: "failed", phase: "failed" });
-      }
-      return;
-    }
-
-    set({ status: "starting", phase: "starting", workspaceId });
-    const channel = new Channel<TaskStreamEnvelope>();
-    channel.onmessage = (envelope) => reduce(envelope.item, set, get);
-
-    try {
-      const view = await invoke<TaskView>("agent_start_task", {
-        workspaceId,
-        prompt: composed,
-        profileOverride: null,
-        channel,
-      });
-      set({ taskId: view.id, status: "streaming" });
-      // Flush whatever has already streamed in while the invoke was in flight.
-      void persistAll(view.id, get().turns);
-    } catch (e) {
-      const t = [...get().turns];
-      t[t.length - 1] = { ...t[t.length - 1], error: formatError(e), streaming: false };
-      set({ turns: t, status: "failed", phase: "failed" });
-    }
+    set({ workspaceRoot: workspaceRoot ?? get().workspaceRoot });
+    await sendNow(set, get, workspaceId, { id: nextId(), text, mode, oneShot }, workspaceRoot);
   },
 
   stop: async (force) => {
@@ -221,7 +321,9 @@ export const useChat = create<ChatStore>((set, get) => ({
     await ipc.agentStopTask(taskId, force).catch(() => {});
     const t = [...get().turns];
     if (t.length) t[t.length - 1] = { ...t[t.length - 1], streaming: false };
-    set({ turns: t, status: "awaiting-input", phase: "complete" });
+    // Stopping is a decision to stop, so the queue holds rather than starting
+    // the next thing the moment this one is cut short.
+    set({ turns: t, status: "awaiting-input", phase: "complete", queuePaused: true });
     void persistAll(taskId, t);
   },
 
@@ -233,7 +335,16 @@ export const useChat = create<ChatStore>((set, get) => ({
     // `abort`, which leaves the agent running — one stray process, and one
     // held session lease, for every conversation started.
     if (taskId) await ipc.agentStopTask(taskId, true).catch(() => {});
-    set({ taskId: null, turns: [], status: "idle", phase: "idle", mode: null, oneShot: null });
+    set({
+      taskId: null,
+      turns: [],
+      status: "idle",
+      phase: "idle",
+      mode: null,
+      oneShot: null,
+      queue: [],
+      queuePaused: false,
+    });
   },
 
   deleteSession: async (taskId) => {
@@ -243,7 +354,7 @@ export const useChat = create<ChatStore>((set, get) => ({
     await ipc.chatDeleteSession(taskId).catch(() => {});
     // Deleting the conversation you're in leaves you on a fresh one.
     if (get().taskId === taskId) {
-      set({ taskId: null, turns: [], status: "idle", phase: "idle" });
+      set({ taskId: null, turns: [], status: "idle", phase: "idle", queue: [], queuePaused: false });
     }
   },
 
@@ -271,6 +382,9 @@ export const useChat = create<ChatStore>((set, get) => ({
       // Read-only until the agent for this session is running again.
       status: "idle",
       phase: "complete",
+      // A queue belongs to the conversation it was typed into.
+      queue: [],
+      queuePaused: false,
     });
   },
 }));
@@ -321,11 +435,16 @@ function patchLast(get: Get, set: Set, fn: (t: Turn) => Turn) {
   set({ turns });
 }
 
-function reduce(item: StreamItem, set: Set, get: Get) {
+/**
+ * Exported for tests. The `agent_end` → drain wiring is the part most likely
+ * to break, and reaching it through a real Tauri channel in a test would prove
+ * less than driving the reducer directly.
+ */
+export function reduce(item: StreamItem, set: Set, get: Get) {
   if (item.kind === "process_exited") {
     if (get().status !== "idle") {
       patchLast(get, set, (t) => ({ ...t, streaming: false }));
-      set({ status: "failed", phase: "failed", taskId: null });
+      set({ status: "failed", phase: "failed", taskId: null, queuePaused: true });
     }
     return;
   }
@@ -348,7 +467,9 @@ function reduce(item: StreamItem, set: Set, get: Get) {
       if (m.role !== "assistant") break;
       if (m.errorMessage) {
         patchLast(get, set, (t) => ({ ...t, error: m.errorMessage, streaming: false }));
-        set({ status: "failed", phase: "failed" });
+        // Hold the queue: draining into a failed agent turns one failure into
+        // a run of them, and the prompts are still there to resume or edit.
+        set({ status: "failed", phase: "failed", queuePaused: true });
         const { taskId } = get();
         if (taskId) void persistAll(taskId, get().turns);
       } else if (m.text) {
@@ -431,6 +552,10 @@ function reduce(item: StreamItem, set: Set, get: Get) {
       if (taskId) {
         void persistAll(taskId, turns).then(() => nameOnce(taskId, get));
       }
+      // The agent is free now, so hand it whatever was typed while it worked.
+      // Driven from here rather than a timer: this is the moment the agent
+      // becomes ready, and anything earlier would talk over the running turn.
+      drainQueue(set, get);
       break;
     }
 

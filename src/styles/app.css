@@ -669,3 +669,34 @@ body {
 .recent-row .recent-x { opacity: 0; transition: opacity var(--motion-fast, 120ms) ease; }
 .recent-row:hover .recent-x,
 .recent-row:focus-within .recent-x { opacity: 1; }
+
+/* A prompt waiting its turn. Quiet enough to sit above the composer without
+   competing with the conversation, with its controls appearing on hover the
+   way the recents list does. */
+.queued-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 2px 2px;
+  border-radius: var(--r-control);
+}
+.queued-row:hover { background: var(--raised); }
+.queued-text {
+  appearance: none;
+  border: 0;
+  background: none;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 2px 0;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+.queued-row .queued-x { opacity: 0; transition: opacity var(--motion-fast, 120ms) ease; }
+.queued-row:hover .queued-x,
+.queued-row:focus-within .queued-x { opacity: 1; }

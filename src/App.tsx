@@ -26,6 +26,7 @@ import { EditorPane } from "./components/EditorPane";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FileTree } from "./components/FileTree";
 import { Palette, type PaletteMode } from "./components/Palette";
+import { QueuedList } from "./components/QueuedList";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { SessionsPanel } from "./components/SessionsPanel";
 import { SettingsView } from "./components/SettingsView";
@@ -316,7 +317,9 @@ export default function App() {
   };
 
   const busy = chatStatus === "starting" || chatStatus === "streaming";
-  const canRun = Boolean(workspace && resolvedProfile && prompt.trim() && !busy);
+  // No `!busy`: typing while a turn runs is the point — it queues instead of
+  // blocking, and the queue starts itself when the agent is free.
+  const canRun = Boolean(workspace && resolvedProfile && prompt.trim());
 
   const submit = () => {
     if (!canRun || !workspace) return;
@@ -598,6 +601,7 @@ export default function App() {
               )}
             </div>
           )}
+          <QueuedList />
           {commandNote && (
             <div className="composer-meta" role="status">
               <span style={{ color: "var(--ink-muted)", fontSize: "var(--text-xs)" }}>{commandNote}</span>
@@ -624,7 +628,7 @@ export default function App() {
               rows={1}
               placeholder={workspace ? PLACEHOLDER : "Open a workspace to run tasks"}
               value={prompt}
-              disabled={!workspace || busy}
+              disabled={!workspace}
               onChange={(e) => {
                 setPrompt(e.target.value);
                 setCaret(e.target.selectionStart ?? e.target.value.length);
@@ -651,8 +655,8 @@ export default function App() {
               className="btn primary send"
               disabled={!canRun}
               onClick={submit}
-              aria-label={busy ? "Running" : "Send"}
-              title={busy ? "Running…" : "Send (↵)"}
+              aria-label={busy ? "Add to queue" : "Send"}
+              title={busy ? "Queue it — starts when this turn finishes (↵)" : "Send (↵)"}
             >
               {busy ? <AgentOrb phase="thinking" /> : <ArrowUp size={16} strokeWidth={2} />}
             </button>
