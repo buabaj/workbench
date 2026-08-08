@@ -114,7 +114,7 @@ function BranchPicker({
   };
 
   return (
-    <div ref={ref} style={{ position: "relative" }}>
+    <div ref={ref} style={{ position: "relative", minWidth: 0, flexShrink: 1 }}>
       <button
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -134,8 +134,12 @@ function BranchPicker({
           cursor: "default",
         }}
       >
-        {current}
-        <ChevronDown size={11} strokeWidth={2} />
+        <span
+          style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        >
+          {current}
+        </span>
+        <ChevronDown size={11} strokeWidth={2} style={{ flexShrink: 0 }} />
       </button>
 
       {err && (
@@ -249,6 +253,10 @@ function BranchLine({
         color: "var(--ink-faint)",
         fontFamily: "var(--mono)",
         padding: "0 2px 6px",
+        // A long branch name used to wrap and shove the upstream line onto a
+        // second row. The name truncates instead: which branch you are on is
+        // readable from its first characters, and the panel keeps its shape.
+        minWidth: 0,
       }}
     >
       <BranchPicker workspaceId={workspaceId} current={branch.branch} onSwitched={onSwitched} />
@@ -263,7 +271,7 @@ function BranchLine({
           </span>
         )
       ) : (
-        <span>no upstream</span>
+        <span style={{ flexShrink: 0 }}>no upstream</span>
       )}
     </div>
   );

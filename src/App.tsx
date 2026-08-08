@@ -49,7 +49,15 @@ import { VoiceButton } from "./components/VoiceButton";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { formatError, ipc, onFsChanged, type AgentCommand, type WorkspaceView } from "./ipc/client";
 import { findTemplate } from "./commands/prompts";
-import { useLayout } from "./store/layout";
+import {
+  INSPECTOR_DEFAULT,
+  INSPECTOR_MAX,
+  INSPECTOR_MIN,
+  RAIL_DEFAULT,
+  RAIL_MAX,
+  RAIL_MIN,
+  useLayout,
+} from "./store/layout";
 import { useTheme } from "./store/theme";
 import { useChat } from "./store/chat";
 import { useComposer } from "./store/composer";
@@ -72,6 +80,35 @@ const RESEARCH_TABS = [
   { key: "links" as const, label: "Backlinks", Icon: Link2 },
 ];
 
+/**
+ * Drag a divider.
+ *
+ * Pointer capture rather than window listeners: the pointer leaves the 5px
+ * handle within the first few pixels of any real drag, and without capture the
+ * gesture dies there. Deltas are given from where the drag began, so the panel
+ * tracks the cursor exactly instead of drifting by an accumulated rounding
+ * error over a long drag.
+ */
+function beginResize(
+  e: React.PointerEvent<HTMLDivElement>,
+  apply: (delta: { x: number; y: number }) => void,
+) {
+  e.preventDefault();
+  const handle = e.currentTarget;
+  handle.setPointerCapture(e.pointerId);
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const onMove = (ev: PointerEvent) =>
+    apply({ x: ev.clientX - startX, y: ev.clientY - startY });
+  const onUp = (ev: PointerEvent) => {
+    handle.releasePointerCapture(ev.pointerId);
+    handle.removeEventListener("pointermove", onMove);
+    handle.removeEventListener("pointerup", onUp);
+  };
+  handle.addEventListener("pointermove", onMove);
+  handle.addEventListener("pointerup", onUp);
+}
+
 export default function App() {
   const workspace = useWorkspace((s) => s.workspace);
   const pickWorkspace = useWorkspace((s) => s.pickWorkspace);
@@ -83,6 +120,10 @@ export default function App() {
   const activeTabId = useLayout((s) => s.activeTabId);
   const railOpen = useLayout((s) => s.railOpen);
   const inspectorOpen = useLayout((s) => s.inspectorOpen);
+  const railWidth = useLayout((s) => s.railWidth);
+  const inspectorWidth = useLayout((s) => s.inspectorWidth);
+  const setRailWidth = useLayout((s) => s.setRailWidth);
+  const setInspectorWidth = useLayout((s) => s.setInspectorWidth);
   const toggleRail = useLayout((s) => s.toggleRail);
   const toggleInspector = useLayout((s) => s.toggleInspector);
   const focusChat = useLayout((s) => s.focusChat);
@@ -144,22 +185,14 @@ export default function App() {
 
   // Pointer capture rather than window listeners: the drag keeps working when
   // the pointer crosses the terminal, which swallows events of its own.
-  const startTerminalDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const handle = e.currentTarget;
-    handle.setPointerCapture(e.pointerId);
-    const startY = e.clientY;
-    const startH = terminalHeight;
-    const onMove = (ev: PointerEvent) =>
-      setTerminalHeight(clampTerminal(startH + (startY - ev.clientY)));
-    const onUp = (ev: PointerEvent) => {
-      handle.releasePointerCapture(ev.pointerId);
-      handle.removeEventListener("pointermove", onMove);
-      handle.removeEventListener("pointerup", onUp);
-    };
-    handle.addEventListener("pointermove", onMove);
-    handle.addEventListener("pointerup", onUp);
-  };
+  const startTerminalDrag = (e: React.PointerEvent<HTMLDivElement>) =>
+    beginResize(e, (d) => setTerminalHeight(clampTerminal(terminalHeight - d.y)));
+
+  const startRailDrag = (e: React.PointerEvent<HTMLDivElement>) =>
+    beginResize(e, (d) => setRailWidth(railWidth + d.x));
+
+  const startInspectorDrag = (e: React.PointerEvent<HTMLDivElement>) =>
+    beginResize(e, (d) => setInspectorWidth(inspectorWidth - d.x));
 
   useEffect(() => {
     initTheme();
@@ -419,7 +452,13 @@ export default function App() {
     <div
       className="app"
       style={{
-        gridTemplateColumns: `${railOpen ? "auto" : "0"} 1fr ${inspectorOpen ? "auto" : "0"}`,
+        gridTemplateColumns: [
+          railOpen ? `${railWidth}px` : "0",
+          railOpen ? "5px" : "0",
+          "1fr",
+          inspectorOpen ? "5px" : "0",
+          inspectorOpen ? `${inspectorWidth}px` : "0",
+        ].join(" "),
       }}
     >
       <header className="bar" data-tauri-drag-region>
@@ -487,7 +526,7 @@ export default function App() {
       </header>
 
       {railOpen && (
-        <nav className="rail" aria-label="Workspace">
+        <nav className="rail" aria-label="Workspace" style={{ width: railWidth }}>
           <ErrorBoundary>
             {workspace ? (
               <div className="rail-section">
@@ -630,6 +669,30 @@ export default function App() {
             )}
           </ErrorBoundary>
         </nav>
+      )}
+
+      {/* Keyboard-resizable too: a drag-only handle is unreachable, and this is
+          now the only way to size the panel. */}
+      {railOpen && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          aria-valuenow={railWidth}
+          aria-valuemin={RAIL_MIN}
+          aria-valuemax={RAIL_MAX}
+          tabIndex={0}
+          className="rule-drag rail-grip"
+          onPointerDown={startRailDrag}
+          onDoubleClick={() => setRailWidth(RAIL_DEFAULT)}
+          title="Drag to resize · double-click to reset"
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft") setRailWidth(railWidth - 24);
+            else if (e.key === "ArrowRight") setRailWidth(railWidth + 24);
+            else return;
+            e.preventDefault();
+          }}
+        />
       )}
 
       <div className="center">
@@ -824,7 +887,28 @@ export default function App() {
       </div>
 
       {inspectorOpen && (
-        <aside className="inspector" aria-label="Inspector">
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize inspector"
+          aria-valuenow={inspectorWidth}
+          aria-valuemin={INSPECTOR_MIN}
+          aria-valuemax={INSPECTOR_MAX}
+          tabIndex={0}
+          className="rule-drag inspector-grip"
+          onPointerDown={startInspectorDrag}
+          onDoubleClick={() => setInspectorWidth(INSPECTOR_DEFAULT)}
+          title="Drag to resize · double-click to reset"
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft") setInspectorWidth(inspectorWidth + 24);
+            else if (e.key === "ArrowRight") setInspectorWidth(inspectorWidth - 24);
+            else return;
+            e.preventDefault();
+          }}
+        />
+      )}
+      {inspectorOpen && (
+        <aside className="inspector" aria-label="Inspector" style={{ width: inspectorWidth }}>
           <ErrorBoundary>
             <section className="panel" aria-labelledby="p-agent">
               <h3 id="p-agent">Agent</h3>

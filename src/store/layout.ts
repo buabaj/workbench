@@ -35,6 +35,8 @@ interface Persisted {
   activeTabId: string;
   railOpen: boolean;
   inspectorOpen: boolean;
+  railWidth?: number;
+  inspectorWidth?: number;
   /** Which stance the workspace was last in. Per workspace, not global: a
    *  notes vault and a codebase want different answers. */
   mode?: "code" | "research";
@@ -74,16 +76,33 @@ interface LayoutStore {
   toggleMdPreview(relPath: string): void;
   toggleRail(): void;
   toggleInspector(): void;
+  /** Panel widths, in pixels, clamped and persisted per workspace. */
+  railWidth: number;
+  inspectorWidth: number;
+  setRailWidth(px: number): void;
+  setInspectorWidth(px: number): void;
   activeFile(): string | null;
   hydrate(workspaceId: string): Promise<void>;
 }
+
+/** Panel widths. Wide enough for a path, narrow enough to leave the document
+ *  the room — and both are a matter of taste, which is why they are draggable. */
+export const RAIL_DEFAULT = 248;
+export const RAIL_MIN = 170;
+export const RAIL_MAX = 520;
+export const INSPECTOR_DEFAULT = 300;
+export const INSPECTOR_MIN = 220;
+export const INSPECTOR_MAX = 560;
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 let persistTimer: number | undefined;
 
 export const useLayout = create<LayoutStore>((set, get) => {
   /** Debounced so dragging or rapid tab changes don't hammer SQLite. */
   const persist = () => {
-    const { workspaceId, tabs, activeTabId, railOpen, inspectorOpen, mode } = get();
+    const { workspaceId, tabs, activeTabId, railOpen, inspectorOpen, mode, railWidth, inspectorWidth } =
+      get();
     if (!workspaceId) return;
     window.clearTimeout(persistTimer);
     persistTimer = window.setTimeout(() => {
@@ -92,6 +111,8 @@ export const useLayout = create<LayoutStore>((set, get) => {
         activeTabId,
         railOpen,
         inspectorOpen,
+        railWidth,
+        inspectorWidth,
         mode,
       };
       void ipc.workspaceSettingSet(workspaceId, LAYOUT_KEY, payload).catch(() => {});
@@ -103,6 +124,8 @@ export const useLayout = create<LayoutStore>((set, get) => {
     activeTabId: "chat",
     railOpen: true,
     inspectorOpen: true,
+    railWidth: RAIL_DEFAULT,
+    inspectorWidth: INSPECTOR_DEFAULT,
     workspaceId: null,
     mdPreview: {},
 
@@ -185,6 +208,17 @@ export const useLayout = create<LayoutStore>((set, get) => {
       set({ railTab: "changes", changesFocus: relPath, railOpen: true }),
     clearChangesFocus: () => set({ changesFocus: null }),
 
+    // Clamped on the way in, so a persisted width from a bigger display cannot
+    // leave a panel wider than the window it is opened on.
+    setRailWidth: (px) => {
+      set({ railWidth: clamp(px, RAIL_MIN, RAIL_MAX) });
+      persist();
+    },
+    setInspectorWidth: (px) => {
+      set({ inspectorWidth: clamp(px, INSPECTOR_MIN, INSPECTOR_MAX) });
+      persist();
+    },
+
     toggleRail: () => {
       set((s) => ({ railOpen: !s.railOpen }));
       persist();
@@ -225,6 +259,12 @@ export const useLayout = create<LayoutStore>((set, get) => {
         activeTabId,
         railOpen: saved.railOpen ?? true,
         inspectorOpen: saved.inspectorOpen ?? true,
+        railWidth: clamp(saved.railWidth ?? RAIL_DEFAULT, RAIL_MIN, RAIL_MAX),
+        inspectorWidth: clamp(
+          saved.inspectorWidth ?? INSPECTOR_DEFAULT,
+          INSPECTOR_MIN,
+          INSPECTOR_MAX,
+        ),
         mode: saved.mode ?? "code",
         // The rail views differ per mode, so a stale tab from the other one
         // would land on a panel that no longer exists.

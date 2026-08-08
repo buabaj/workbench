@@ -237,12 +237,14 @@ export function ReviewPanel() {
           {diff.skipped.length} file(s) too large to checkpoint — not restorable.
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-        <button className="btn primary" disabled={busy} onClick={() => void keep()}>
+      {/* Small, like everything else in an inspector panel. At full size these
+          two read as a dialog that had wandered into a sidebar. */}
+      <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+        <button className="btn primary small" disabled={busy} onClick={() => void keep()}>
           Keep
         </button>
         <button
-          className="btn"
+          className="btn small"
           disabled={busy || selected.size === 0}
           onClick={() => void restore()}
           title="Restore selected files to their pre-task state (undoable)"

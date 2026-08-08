@@ -24,10 +24,10 @@ body {
   display: grid;
   height: 100vh;
   grid-template-rows: var(--bar-h) 1fr;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto auto 1fr auto auto;
   grid-template-areas:
-    "bar bar bar"
-    "rail center inspector";
+    "bar bar bar bar bar"
+    "rail rail-grip center inspector-grip inspector";
   background: var(--canvas);
 }
 
@@ -78,7 +78,8 @@ body {
 .rail {
   grid-area: rail;
   min-height: 0;
-  width: var(--rail-w);
+  /* Width is set inline from the layout store — the token is the default the
+     store starts from, and the drag handle owns it thereafter. */
   border-right: 1px solid var(--border);
   padding: var(--s-3) 0;
   overflow-y: auto;
@@ -226,7 +227,6 @@ body {
 .inspector {
   grid-area: inspector;
   min-height: 0;
-  width: var(--inspector-w);
   border-left: 1px solid var(--border);
   overflow-y: auto;
   padding: var(--s-4);
@@ -594,6 +594,12 @@ body {
 .rule-drag:focus-visible {
   background: var(--rule-clay-hover);
 }
+
+/* Panel grips: the same drag handle as the terminal's, stood on its end.
+   A panel you can only open and close is a panel someone else sized for you. */
+.rail-grip { grid-area: rail-grip; }
+.inspector-grip { grid-area: inspector-grip; }
+.rail-grip, .inspector-grip { cursor: col-resize; }
 
 /* Terminal tabs: numbered, quiet, with the active one lifted onto the canvas
    the way a document tab sits on its page. */
