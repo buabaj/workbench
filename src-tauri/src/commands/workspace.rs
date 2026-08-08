@@ -521,6 +521,32 @@ pub fn worktree_branch(
     Ok(crate::vcs::worktree::branch_state(root.real())?)
 }
 
+/// Every branch worth offering, local first.
+#[tauri::command]
+pub fn worktree_branches(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+) -> Result<Vec<crate::vcs::branch::BranchRef>, AppError> {
+    let root = root_for(&open, &workspace_id)?;
+    Ok(crate::vcs::branch::list(root.real())?)
+}
+
+/// Check out a branch.
+///
+/// The one operation in the app that changes what the working tree holds. It
+/// refuses exactly where `git checkout` refuses, so uncommitted work is never
+/// lost to a switch — the error says what to do about it.
+#[tauri::command]
+pub fn worktree_switch_branch(
+    open: State<'_, OpenWorkspaces>,
+    workspace_id: String,
+    name: String,
+) -> Result<(), AppError> {
+    let root = root_for(&open, &workspace_id)?;
+    crate::vcs::branch::switch(root.real(), &name)?;
+    Ok(())
+}
+
 /// Unified patch for one uncommitted file.
 #[tauri::command]
 pub fn worktree_patch(

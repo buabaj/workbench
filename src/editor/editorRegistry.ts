@@ -52,4 +52,22 @@ export const editorRegistry = {
     if (liveViews.get(key) === view) liveViews.delete(key);
   },
   liveView: (key: string) => liveViews.get(key),
+
+  /**
+   * Forget stashed state for files that are not on screen.
+   *
+   * A mounted editor reloads itself when the file changes underneath it, but a
+   * background tab holds an EditorState nobody is watching. After something
+   * rewrites many files at once — switching branches — those tabs would show
+   * the previous branch's contents indefinitely. Dropping the stash makes them
+   * re-read from disk the next time they mount.
+   *
+   * Only where there is no live view: the mounted one is handled by the
+   * watcher, and deleting its state would throw away the undo history.
+   */
+  dropUnmounted(keys: string[]) {
+    for (const key of keys) {
+      if (!liveViews.has(key)) sessions.delete(key);
+    }
+  },
 };

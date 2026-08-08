@@ -81,6 +81,15 @@ export interface BranchState {
   behind: number;
 }
 
+/** A branch you could switch to. */
+export interface BranchRef {
+  /** `main`, or `origin/main` for a remote branch with no local counterpart. */
+  name: string;
+  isHead: boolean;
+  /** Switching to one of these creates a local branch that tracks it. */
+  isRemote: boolean;
+}
+
 export interface SearchQuery {
   pattern: string;
   caseSensitive: boolean;
@@ -402,6 +411,12 @@ export const ipc = {
     invoke<ImportOutcome>("paper_import", { workspaceId, paper }),
   worktreeBranch: (workspaceId: string) =>
     invoke<BranchState>("worktree_branch", { workspaceId }),
+  worktreeBranches: (workspaceId: string) =>
+    invoke<BranchRef[]>("worktree_branches", { workspaceId }),
+  /** Check out a branch. Refuses exactly where `git checkout` refuses, so
+   *  uncommitted work is never lost to a switch. */
+  worktreeSwitchBranch: (workspaceId: string, name: string) =>
+    invoke<void>("worktree_switch_branch", { workspaceId, name }),
   worktreePatch: (workspaceId: string, relPath: string) =>
     invoke<string>("worktree_patch", { workspaceId, relPath }),
   /** Proceed with quitting; the exit handler is holding for this. */

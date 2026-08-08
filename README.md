@@ -156,8 +156,11 @@ switch decides which tools you get.
 **Code mode.** ⌘P opens a file, ⇧⌘F searches the project, ⌃\` or ⌘⇧T toggles
 the terminal, ⌘S saves. `@` in the chat references a file; highlight code and a
 bubble offers to send it to the agent. The **Changes** tab lists uncommitted
-work and opens diffs side by side. There is no stage or commit — that stays in
-the terminal, where you already do it.
+work and opens diffs side by side. The branch name above the list switches
+branches — it refuses exactly where `git checkout` refuses, so a switch can
+never overwrite uncommitted work, and a remote-only branch becomes a local one
+tracking it. There is no stage or commit — that stays in the terminal, where you
+already do it.
 
 The file tree colours changed files the way git sees them — new, modified,
 deleted — and marks a collapsed folder that hides changes, so you do not have to

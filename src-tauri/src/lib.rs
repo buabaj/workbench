@@ -172,6 +172,8 @@ pub fn run() {
             commands::workspace::file_stat,
             commands::workspace::file_write,
             commands::workspace::worktree_changes,
+            commands::workspace::worktree_branches,
+            commands::workspace::worktree_switch_branch,
             commands::workspace::worktree_patch,
             commands::workspace::worktree_branch,
             commands::workspace::notes_scan,

@@ -10,6 +10,7 @@
 //! Blobs are written from raw bytes (`repo.blob`), never `blob_path`/`add_path`,
 //! so clean filters (autocrlf, LFS) can't make restore non-round-tripping.
 
+pub mod branch;
 pub mod diff;
 pub mod restore;
 pub mod snapshot;

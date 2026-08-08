@@ -1,12 +1,14 @@
-import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Check, ChevronDown, Cloud, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   formatError,
   ipc,
   onFsChanged,
+  type BranchRef,
   type BranchState,
   type WorktreeChange,
 } from "../ipc/client";
+import { editorRegistry } from "../editor/editorRegistry";
 import { useLayout } from "../store/layout";
 import { useWorkspace } from "../store/workspace";
 
@@ -46,13 +48,196 @@ function statusColor(status: string, untracked: boolean): string {
 }
 
 /**
+ * Switch branches from the branch line.
+ *
+ * The one thing in this panel that changes the repository, and it stops at
+ * exactly the line git draws: a switch that would overwrite uncommitted work
+ * is refused, with git's own reason. Commit, stage and push stay in the
+ * terminal — moving between branches is navigation, not publishing.
+ */
+function BranchPicker({
+  workspaceId,
+  current,
+  onSwitched,
+}: {
+  workspaceId: string;
+  current: string;
+  onSwitched: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [branches, setBranches] = useState<BranchRef[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setErr(null);
+    void ipc
+      .worktreeBranches(workspaceId)
+      .then(setBranches)
+      .catch((e) => setErr(formatError(e)));
+    const onDoc = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open, workspaceId]);
+
+  const go = async (name: string) => {
+    setBusy(name);
+    setErr(null);
+    try {
+      await ipc.worktreeSwitchBranch(workspaceId, name);
+      // A checkout rewrites many files at once. The mounted editor reloads
+      // itself from the watcher; background tabs hold stashed state nobody is
+      // watching, and would go on showing the branch you just left.
+      const buffers = useWorkspace.getState().buffers;
+      editorRegistry.dropUnmounted(
+        Object.values(buffers)
+          .filter((b) => b.phase === "clean")
+          .map((b) => b.relPath),
+      );
+      // HEAD moved, so the tree's git markings are stale even when no file
+      // on disk changed — switching between two identical branches fires no
+      // watcher event at all.
+      void useWorkspace.getState().refreshGitStatus();
+      setOpen(false);
+      onSwitched();
+    } catch (e) {
+      // Kept open and shown in place: this is usually "your changes would be
+      // overwritten", which is a thing to act on, not a dead end.
+      setErr(formatError(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Branch: ${current}. Switch branch`}
+        title="Switch branch"
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 3,
+          background: "none",
+          border: 0,
+          padding: 0,
+          font: "inherit",
+          fontFamily: "var(--mono)",
+          color: "var(--clay-text)",
+          cursor: "default",
+        }}
+      >
+        {current}
+        <ChevronDown size={11} strokeWidth={2} />
+      </button>
+
+      {err && (
+        <div
+          role="alert"
+          style={{
+            marginTop: 3,
+            fontSize: "var(--text-xs)",
+            color: "var(--error)",
+            fontFamily: "var(--sans)",
+            lineHeight: 1.5,
+            whiteSpace: "normal",
+          }}
+        >
+          {err}
+        </div>
+      )}
+
+      {open && (
+        <div
+          role="listbox"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            zIndex: 40,
+            minWidth: 220,
+            maxHeight: 280,
+            overflowY: "auto",
+            background: "var(--canvas)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--r-panel)",
+            boxShadow: "var(--lift-strong)",
+            padding: 3,
+          }}
+        >
+          {!branches && (
+            <div style={{ padding: "4px 8px", color: "var(--ink-faint)" }}>Reading refs…</div>
+          )}
+          {branches?.map((b) => (
+            <button
+              key={b.name}
+              role="option"
+              aria-selected={b.isHead}
+              disabled={busy !== null}
+              onClick={() => void go(b.name)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                width: "100%",
+                textAlign: "left",
+                background: "none",
+                border: 0,
+                borderRadius: "var(--r-control)",
+                padding: "3px 8px",
+                font: "inherit",
+                fontFamily: "var(--mono)",
+                color: b.isHead ? "var(--clay-text)" : "var(--ink-secondary)",
+                cursor: "default",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--raised)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+            >
+              {b.isHead ? (
+                <Check size={11} strokeWidth={2.4} />
+              ) : b.isRemote ? (
+                /* Remote-only: choosing it creates a local branch tracking it,
+                   so the difference is worth showing before the click. */
+                <Cloud size={11} strokeWidth={1.8} style={{ color: "var(--ink-faint)" }} />
+              ) : (
+                <span style={{ width: 11 }} />
+              )}
+              <span style={{ flex: 1, minWidth: 0 }}>{b.name}</span>
+              {busy === b.name && <span style={{ color: "var(--ink-faint)" }}>…</span>}
+            </button>
+          ))}
+          {branches?.length === 0 && (
+            <div style={{ padding: "4px 8px", color: "var(--ink-faint)" }}>No branches.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Branch and upstream position.
  *
  * Shown even when there is nothing uncommitted, because that is precisely when
  * it is needed: a clean tree that is "ahead of origin/main by 32 commits" made
  * an empty change list look broken to anyone who had just run `git status`.
  */
-function BranchLine({ branch }: { branch: BranchState | null }) {
+function BranchLine({
+  branch,
+  workspaceId,
+  onSwitched,
+}: {
+  branch: BranchState | null;
+  workspaceId: string;
+  onSwitched: () => void;
+}) {
   if (!branch?.branch) return null;
   return (
     <div
@@ -66,7 +251,7 @@ function BranchLine({ branch }: { branch: BranchState | null }) {
         padding: "0 2px 6px",
       }}
     >
-      <span style={{ color: "var(--clay-text)" }}>{branch.branch}</span>
+      <BranchPicker workspaceId={workspaceId} current={branch.branch} onSwitched={onSwitched} />
       {branch.upstream ? (
         branch.ahead === 0 && branch.behind === 0 ? (
           <span>up to date with {branch.upstream}</span>
@@ -144,7 +329,7 @@ export function ChangesPanel() {
   if (changes.length === 0) {
     return (
       <div>
-        <BranchLine branch={branch} />
+        <BranchLine branch={branch} workspaceId={workspace.id} onSwitched={reload} />
         <div className="panel-empty">No uncommitted changes.</div>
       </div>
     );
@@ -157,7 +342,7 @@ export function ChangesPanel() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-      <BranchLine branch={branch} />
+      <BranchLine branch={branch} workspaceId={workspace.id} onSwitched={reload} />
       <div
         style={{
           display: "flex",
