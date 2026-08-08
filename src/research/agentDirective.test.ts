@@ -24,6 +24,23 @@ describe("parseDirectives", () => {
     expect(parseDirectives("@agent[never closed and more text")).toEqual([]);
   });
 
+  /**
+   * The regression: a stray `@agent[` left mid-thought used to abandon the
+   * whole scan, so every directive below it stopped working and the keystroke
+   * silently did nothing.
+   */
+  it("keeps looking after an unclosed one", () => {
+    const doc = "@agent[oops I never closed this\n\nlater on\n\n@agent[greet back]";
+    expect(parseDirectives(doc).map((d) => d.instruction)).toEqual(["greet back"]);
+  });
+
+  it("finds a good one before and after a broken one", () => {
+    const doc = "@agent[first] then @agent[broken and then @agent[second]";
+    const found = parseDirectives(doc).map((d) => d.instruction);
+    expect(found).toContain("first");
+    expect(found).toContain("second");
+  });
+
   it("ignores an empty instruction", () => {
     expect(parseDirectives("@agent[]")).toEqual([]);
   });

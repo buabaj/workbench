@@ -42,6 +42,9 @@ interface WorkspaceStore {
   openWorkspace(path: string): Promise<void>;
   loadChildren(subpath: string): Promise<void>;
   collapseAll(): void;
+  /** Transient one-line message, for actions with no visible result. */
+  notice: string | null;
+  notify(message: string): void;
   selectDir(relPath: string): void;
   toggleDir(relPath: string): void;
   openFile(relPath: string): void;
@@ -105,6 +108,16 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
 
   /** Fold every directory shut, leaving the root level visible. */
   collapseAll: () => set({ expanded: {}, selectedDir: "" }),
+
+  notice: null,
+  notify: (message) => {
+    set({ notice: message });
+    window.setTimeout(() => {
+      // Only clear if it is still the same message: a newer one must not be
+      // cut short by an older one's timer.
+      if (useWorkspace.getState().notice === message) set({ notice: null });
+    }, 4000);
+  },
 
   selectDir: (relPath) => set({ selectedDir: relPath }),
 

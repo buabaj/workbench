@@ -225,6 +225,7 @@ export function EditorPane() {
   // An annotation is captured against the PDF but written into the NOTE, so
   // the comment is collected here, where the note's path is known.
   const [pendingAnnotation, setPendingAnnotation] = useState<PdfSelection | null>(null);
+  const notice = useWorkspace((s) => s.notice);
 
   if (!workspace || !active) return null;
   // A PDF is not text; opening one in the editor would show its raw bytes.
@@ -236,6 +237,21 @@ export function EditorPane() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       {phase === "conflict" && <ConflictBanner workspaceId={workspace.id} relPath={active} />}
+      {notice && (
+        <div
+          role="status"
+          style={{
+            padding: "5px var(--s-4)",
+            borderBottom: "1px solid var(--border)",
+            background: "var(--raised)",
+            color: "var(--ink-muted)",
+            fontSize: "var(--text-xs)",
+            flexShrink: 0,
+          }}
+        >
+          {notice}
+        </div>
+      )}
       {pendingAnnotation && (
         <AnnotationComposer
           workspaceId={workspace.id}

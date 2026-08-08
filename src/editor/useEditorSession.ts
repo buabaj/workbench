@@ -94,8 +94,15 @@ export function useEditorSession(workspaceId: string, relPath: string) {
       const runDirective = (view: EditorView): boolean => {
         const text = view.state.doc.toString();
         const d = directiveAt(text, view.state.selection.main.head);
-        // No directive: leave ⌘↵ alone rather than swallowing it.
-        if (!d) return false;
+        if (!d) {
+          // Say so. A keystroke that does nothing is indistinguishable from a
+          // broken one, and this binding has now been reported dead twice when
+          // it was working and finding nothing to run.
+          useWorkspace.getState().notify?.(
+            "No @agent[…] found — write one, and check an earlier bracket is closed.",
+          );
+          return false; // and let ⌘↵ do its ordinary thing
+        }
         void execute(view, text, d);
         return true;
       };

@@ -47,7 +47,14 @@ export function parseDirectives(text: string): Directive[] {
       else if (text[i] === "]") depth--;
       i++;
     }
-    if (depth !== 0) break; // unclosed: the rest of the file is not an instruction
+    if (depth !== 0) {
+      // Unclosed. Skip past this marker and keep looking, rather than
+      // abandoning the scan: one stray `@agent[` left mid-thought would
+      // otherwise make every directive below it invisible, with no clue why —
+      // the keystroke simply did nothing.
+      from = at + marker.length;
+      continue;
+    }
 
     const instruction = text.slice(at + marker.length, i - 1).trim();
     if (instruction) out.push({ instruction, start: at, end: i });
