@@ -34,6 +34,9 @@ pub async fn agent_start_task(
     workspace_id: String,
     prompt: String,
     profile_override: Option<String>,
+    // The first message of a conversation can carry attachments too — a new
+    // chat started by dropping a screenshot is the ordinary case, not an edge.
+    images: Option<Vec<crate::agent::supervisor::ImageContent>>,
     channel: Channel<Value>,
 ) -> Result<TaskView, AppError> {
     let task_id = ulid::Ulid::new().to_string();
@@ -202,7 +205,10 @@ pub async fn agent_start_task(
     }
 
     // Fire the prompt.
-    state.supervisor.send(&task_id, "prompt", prompt.clone()).await?;
+    state
+        .supervisor
+        .send(&task_id, "prompt", prompt.clone(), images.unwrap_or_default())
+        .await?;
 
     let conn = state.db.lock().expect("db lock");
     let view = conn.query_row(
@@ -247,11 +253,15 @@ pub async fn agent_send(
     task_id: String,
     command: String,
     message: String,
+    images: Option<Vec<crate::agent::supervisor::ImageContent>>,
 ) -> Result<(), AppError> {
     if !["prompt", "steer", "follow_up"].contains(&command.as_str()) {
         return Err(AppError::Validation(format!("command '{command}' not allowed")));
     }
-    state.supervisor.send(&task_id, &command, message).await?;
+    state
+        .supervisor
+        .send(&task_id, &command, message, images.unwrap_or_default())
+        .await?;
     Ok(())
 }
 
@@ -302,6 +312,8 @@ pub struct ChatTurn {
     pub text: String,
     pub error_text: Option<String>,
     pub created_at: i64,
+    /// JSON array of what was attached; `[]` for a turn with nothing.
+    pub attachments_json: String,
 }
 
 /// Append (or update) a turn. Called as turns complete, so history survives a
@@ -314,16 +326,19 @@ pub fn chat_append_turn(
     role: String,
     text: String,
     error_text: Option<String>,
+    attachments_json: Option<String>,
 ) -> Result<(), AppError> {
     if role != "user" && role != "assistant" {
         return Err(AppError::Validation("bad role".into()));
     }
     let conn = state.db.lock().expect("db lock");
     conn.execute(
-        "INSERT INTO chat_turns (id, task_id, seq, role, text, error_text, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "INSERT INTO chat_turns
+           (id, task_id, seq, role, text, error_text, created_at, attachments_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
          ON CONFLICT(task_id, seq) DO UPDATE SET
-           text = excluded.text, error_text = excluded.error_text",
+           text = excluded.text, error_text = excluded.error_text,
+           attachments_json = excluded.attachments_json",
         rusqlite::params![
             ulid::Ulid::new().to_string(),
             task_id,
@@ -331,7 +346,8 @@ pub fn chat_append_turn(
             role,
             text,
             error_text,
-            now_ms()
+            now_ms(),
+            attachments_json.unwrap_or_else(|| "[]".into())
         ],
     )?;
     Ok(())
@@ -341,7 +357,7 @@ pub fn chat_append_turn(
 pub fn chat_turns(state: State<'_, AppState>, task_id: String) -> Result<Vec<ChatTurn>, AppError> {
     let conn = state.db.lock().expect("db lock");
     let mut stmt = conn.prepare(
-        "SELECT id, seq, role, text, error_text, created_at
+        "SELECT id, seq, role, text, error_text, created_at, attachments_json
            FROM chat_turns WHERE task_id = ?1 ORDER BY seq",
     )?;
     let rows = stmt
@@ -353,6 +369,7 @@ pub fn chat_turns(state: State<'_, AppState>, task_id: String) -> Result<Vec<Cha
                 text: r.get(3)?,
                 error_text: r.get(4)?,
                 created_at: r.get(5)?,
+                attachments_json: r.get(6)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;

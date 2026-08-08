@@ -8,6 +8,8 @@ import {
 } from "../chat/normalize";
 import { referenceFooter } from "../chat/mentions";
 import { composeMessage, type PromptTemplate } from "../commands/prompts";
+import { attachmentFooter, imagePayload, type Attachment } from "../chat/attachments";
+import { withImageData } from "../chat/loadImages";
 import {
   formatError,
   ipc,
@@ -37,6 +39,9 @@ export interface Turn {
   tools: ToolRow[];
   /** Assistant turns stream; user turns are complete on creation. */
   streaming: boolean;
+  /** What was attached to a user turn. Shown in the transcript so the record
+   *  says what the agent was actually given, not just what was typed. */
+  attachments?: Attachment[];
 }
 
 export type ChatStatus =
@@ -70,6 +75,9 @@ export interface QueuedPrompt {
   text: string;
   mode: PromptTemplate | null;
   oneShot: PromptTemplate | null;
+  /** Captured when queued, exactly as the templates are. A drain re-enters
+   *  `sendNow` with only this item, so anything not on it is lost. */
+  attachments: Attachment[];
 }
 
 interface ChatStore {
@@ -100,7 +108,12 @@ interface ChatStore {
   removeQueued(id: string): void;
   resumeQueue(): void;
   refreshProfile(workspaceId: string | null): Promise<void>;
-  send(workspaceId: string, text: string, workspaceRoot?: string): Promise<void>;
+  send(
+    workspaceId: string,
+    text: string,
+    workspaceRoot?: string,
+    attachments?: Attachment[],
+  ): Promise<void>;
   stop(force: boolean): Promise<void>;
   newConversation(): Promise<void>;
   loadSession(taskId: string): Promise<void>;
@@ -127,9 +140,39 @@ const nextId = () => `t${++seq}-${Date.now()}`;
 async function persistAll(taskId: string, turns: Turn[]) {
   for (let i = 0; i < turns.length; i++) {
     const t = turns[i];
-    if (!t.text && !t.error) continue; // nothing worth storing yet
-    await ipc.chatAppendTurn(taskId, i, t.role, t.text, t.error ?? null).catch(() => {});
+    // An attachment-only message has no text and is still worth storing —
+    // otherwise reopening the conversation loses the turn entirely.
+    if (!t.text && !t.error && !t.attachments?.length) continue;
+    await ipc
+      .chatAppendTurn(
+        taskId,
+        i,
+        t.role,
+        t.text,
+        t.error ?? null,
+        // Paths and names, never bytes: the file is still on disk and the
+        // transcript is the wrong place for a second copy of a screenshot.
+        t.attachments?.length ? JSON.stringify(stripBytes(t.attachments)) : undefined,
+      )
+      .catch(() => {});
   }
+}
+
+/** Attachments as stored on a turn. Bad JSON reads as none rather than
+ *  breaking the reload of an entire conversation. */
+function parseAttachments(json: string | undefined): Attachment[] | undefined {
+  if (!json || json === "[]") return undefined;
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) && parsed.length ? (parsed as Attachment[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** What is worth keeping in the record: which files, not their contents. */
+function stripBytes(attachments: Attachment[]): Attachment[] {
+  return attachments.map(({ path, name, kind, size }) => ({ path, name, kind, size }));
 }
 
 /**
@@ -159,13 +202,35 @@ async function sendNow(
   //
   // The templates come from the ITEM, so a queued prompt runs under the mode it
   // was typed under even if the mode has changed since.
-  const footer = workspaceRoot ? referenceFooter(text, workspaceRoot) : "";
-  const composed = footer
-    ? `${composeMessage(text, mode, oneShot)}\n\n${footer}`
-    : composeMessage(text, mode, oneShot);
+  //
+  // Attachments split by kind: an image goes as bytes so the model sees it, a
+  // file goes as a path so the agent reads it with its own tools. Only the
+  // paths appear in the message.
+  const attachments = item.attachments ?? [];
+  const { loaded, failed } = attachments.length ? await withImageData(attachments) : { loaded: attachments, failed: [] };
+  const images = imagePayload(loaded);
+
+  const blocks = [
+    composeMessage(text, mode, oneShot),
+    workspaceRoot ? referenceFooter(text, workspaceRoot) : "",
+    attachmentFooter(loaded),
+  ].filter(Boolean);
+  const composed = blocks.join("\n\n");
   set({ oneShot: null });
 
-  const userTurn: Turn = { id: nextId(), role: "user", text, tools: [], streaming: false };
+  const userTurn: Turn = {
+    id: nextId(),
+    role: "user",
+    text,
+    tools: [],
+    streaming: false,
+    attachments: loaded.length ? stripBytes(loaded) : undefined,
+    // An image that would not load is said out loud rather than quietly
+    // missing from a message the agent then answers as if it had seen it.
+    notice: failed.length
+      ? `Could not attach ${failed.join(", ")} — the rest of the message was sent.`
+      : undefined,
+  };
   const assistantTurn: Turn = {
     id: nextId(),
     role: "assistant",
@@ -183,7 +248,7 @@ async function sendNow(
   // `send` queues in that case and the drain runs after `agent_end`.
   if (taskId && status === "awaiting-input") {
     try {
-      await ipc.agentSend(taskId, "follow_up", composed);
+      await ipc.agentSend(taskId, "follow_up", composed, images);
       void persistAll(taskId, get().turns);
     } catch (e) {
       get().turns[get().turns.length - 1].error = formatError(e);
@@ -205,7 +270,7 @@ async function sendNow(
       // `prompt`, not `follow_up`: a just-resumed agent is idle, with the saved
       // history already loaded. Verified against a live agent — it answers from
       // the restored conversation, not from a blank one.
-      await ipc.agentSend(taskId, "prompt", composed);
+      await ipc.agentSend(taskId, "prompt", composed, images);
       set({ status: "streaming", phase: "thinking" });
       void persistAll(taskId, get().turns);
     } catch (e) {
@@ -225,6 +290,7 @@ async function sendNow(
       workspaceId,
       prompt: composed,
       profileOverride: null,
+      images: images.length ? images : null,
       channel,
     });
     set({ taskId: view.id, status: "streaming" });
@@ -293,7 +359,7 @@ export const useChat = create<ChatStore>((set, get) => ({
     }
   },
 
-  send: async (workspaceId, text, workspaceRoot) => {
+  send: async (workspaceId, text, workspaceRoot, attachments = []) => {
     const { status, mode, oneShot } = get();
 
     // A turn is running: queue it rather than blocking or interrupting.
@@ -304,7 +370,7 @@ export const useChat = create<ChatStore>((set, get) => ({
     if (status === "starting" || status === "streaming") {
       set((s) => ({
         workspaceRoot: workspaceRoot ?? s.workspaceRoot,
-        queue: [...s.queue, { id: nextId(), text, mode, oneShot }],
+        queue: [...s.queue, { id: nextId(), text, mode, oneShot, attachments }],
         oneShot: null,
         // Queuing is an intent to continue, so it lifts a pause.
         queuePaused: false,
@@ -312,7 +378,13 @@ export const useChat = create<ChatStore>((set, get) => ({
       return;
     }
     set({ workspaceRoot: workspaceRoot ?? get().workspaceRoot });
-    await sendNow(set, get, workspaceId, { id: nextId(), text, mode, oneShot }, workspaceRoot);
+    await sendNow(
+      set,
+      get,
+      workspaceId,
+      { id: nextId(), text, mode, oneShot, attachments },
+      workspaceRoot,
+    );
   },
 
   stop: async (force) => {
@@ -378,6 +450,7 @@ export const useChat = create<ChatStore>((set, get) => ({
         error: r.errorText ?? undefined,
         tools: [],
         streaming: false,
+        attachments: parseAttachments(r.attachmentsJson),
       })),
       // Read-only until the agent for this session is running again.
       status: "idle",

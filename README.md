@@ -169,6 +169,14 @@ for rename, duplicate, copy path, reveal in Finder, or move to Trash; arrow keys
 walk the tree and open things without the mouse. Gitignored files and dotfiles
 are shown, because `.env` is a file you edit.
 
+**Attachments.** `+` beside the composer opens a file picker, and files dropped
+anywhere on the window land the same way — as pills above the input, so you add
+the words before sending rather than the drop firing a message on its own.
+Images are sent as pixels for the model to look at; anything else is sent as an
+absolute path for the agent to open with its own tools. A queued prompt keeps
+the attachments it was typed with, and reopening a conversation still shows what
+each message carried.
+
 **Queued prompts.** Type and press ↵ while the agent is working and the message
 joins a queue below the composer instead of being refused. Each item keeps the
 mode or command it was typed under — `/explain this` then `/plan that` run as an

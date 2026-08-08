@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { addAll, removeAt, type Attachment } from "../chat/attachments";
 
 /**
  * The chat input's text, held outside the component that renders it.
@@ -6,9 +7,17 @@ import { create } from "zustand";
  * It was local state in `App`, which meant nothing else could put anything in
  * it. The editor's selection actions and the voice transcript both need to,
  * and neither is a child of the composer — a store is the honest shape.
+ *
+ * Attachments live here for the same reason: they arrive from a picker, from a
+ * drop anywhere on the window, and one day from the file tree. None of those is
+ * a child of the composer either.
  */
 interface ComposerStore {
   text: string;
+  /** Attached but not yet sent. Cleared by sending, like the text is. */
+  attachments: Attachment[];
+  /** Files that could not be attached, said out loud until dismissed. */
+  rejected: string[];
   /** Bumped to ask the textarea to take focus; the value itself is unused. */
   focusTick: number;
 
@@ -19,6 +28,10 @@ interface ComposerStore {
   appendAndFocus(text: string): void;
   focus(): void;
   clear(): void;
+
+  attach(files: Array<{ path: string; size: number }>): void;
+  detach(path: string): void;
+  dismissRejected(): void;
 }
 
 function joined(existing: string, addition: string): string {
@@ -30,6 +43,8 @@ function joined(existing: string, addition: string): string {
 
 export const useComposer = create<ComposerStore>((set, get) => ({
   text: "",
+  attachments: [],
+  rejected: [],
   focusTick: 0,
 
   setText: (text) => set({ text }),
@@ -37,5 +52,19 @@ export const useComposer = create<ComposerStore>((set, get) => ({
   appendAndFocus: (text) =>
     set({ text: joined(get().text, text), focusTick: get().focusTick + 1 }),
   focus: () => set({ focusTick: get().focusTick + 1 }),
-  clear: () => set({ text: "" }),
+  // Sending clears both: the message went, and so did everything on it.
+  clear: () => set({ text: "", attachments: [], rejected: [] }),
+
+  attach: (files) => {
+    const { attachments, rejected } = addAll(get().attachments, files);
+    set({
+      attachments,
+      // Kept until dismissed or the next successful attach — a file that
+      // vanishes on drop reads as a broken drop target.
+      rejected: rejected.map((r) => `${r.path.split("/").pop()}: ${r.reason}`),
+      focusTick: get().focusTick + 1,
+    });
+  },
+  detach: (path) => set({ attachments: removeAt(get().attachments, path) }),
+  dismissRejected: () => set({ rejected: [] }),
 }));

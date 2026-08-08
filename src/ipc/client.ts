@@ -90,6 +90,26 @@ export interface BranchRef {
   isRemote: boolean;
 }
 
+export interface PickedFile {
+  path: string;
+  name: string;
+  size: number;
+}
+
+export interface AttachmentBytes {
+  /** Raw base64, no `data:` prefix — the shape the agent's RPC takes. */
+  base64: string;
+  mimeType: string;
+  size: number;
+}
+
+/** An image in prime-agent's `ImageContent` shape. */
+export interface ImageContent {
+  type: "image";
+  data: string;
+  mimeType: string;
+}
+
 export interface SearchQuery {
   pattern: string;
   caseSensitive: boolean;
@@ -298,6 +318,8 @@ export interface ChatTurnRow {
   text: string;
   errorText: string | null;
   createdAt: number;
+  /** JSON array of attachments; `[]` for a turn with none. */
+  attachmentsJson: string;
 }
 
 export interface SessionSummary {
@@ -411,6 +433,13 @@ export const ipc = {
     invoke<ImportOutcome>("paper_import", { workspaceId, paper }),
   worktreeBranch: (workspaceId: string) =>
     invoke<BranchState>("worktree_branch", { workspaceId }),
+  /** Native multi-select file picker. An empty list means cancelled. */
+  attachmentPick: () => invoke<PickedFile[]>("attachment_pick"),
+  /** Name and size for dropped paths; rejects a folder rather than guessing. */
+  attachmentDescribe: (paths: string[]) =>
+    invoke<PickedFile[]>("attachment_describe", { paths }),
+  /** Image bytes, typed from the file's own header rather than its extension. */
+  attachmentRead: (path: string) => invoke<AttachmentBytes>("attachment_read", { path }),
   worktreeBranches: (workspaceId: string) =>
     invoke<BranchRef[]>("worktree_branches", { workspaceId }),
   /** Check out a branch. Refuses exactly where `git checkout` refuses, so
@@ -506,11 +535,29 @@ export const ipc = {
 
   agentStopTask: (taskId: string, force: boolean) =>
     invoke<void>("agent_stop_task", { taskId, force }),
-  agentSend: (taskId: string, command: "prompt" | "steer" | "follow_up", message: string) =>
-    invoke<void>("agent_send", { taskId, command, message }),
+  agentSend: (
+    taskId: string,
+    command: "prompt" | "steer" | "follow_up",
+    message: string,
+    images?: ImageContent[],
+  ) => invoke<void>("agent_send", { taskId, command, message, images: images ?? null }),
   tasksRecent: (workspaceId: string) => invoke<TaskView[]>("tasks_recent", { workspaceId }),
-  chatAppendTurn: (taskId: string, seq: number, role: string, text: string, errorText: string | null) =>
-    invoke<void>("chat_append_turn", { taskId, seq, role, text, errorText }),
+  chatAppendTurn: (
+    taskId: string,
+    seq: number,
+    role: string,
+    text: string,
+    errorText: string | null,
+    attachmentsJson?: string,
+  ) =>
+    invoke<void>("chat_append_turn", {
+      taskId,
+      seq,
+      role,
+      text,
+      errorText,
+      attachmentsJson: attachmentsJson ?? null,
+    }),
   chatTurns: (taskId: string) => invoke<ChatTurnRow[]>("chat_turns", { taskId }),
   chatSessions: (workspaceId: string) => invoke<SessionSummary[]>("chat_sessions", { workspaceId }),
   chatDeleteSession: (taskId: string) => invoke<void>("chat_delete_session", { taskId }),

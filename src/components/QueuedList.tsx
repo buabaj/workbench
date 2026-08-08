@@ -1,5 +1,6 @@
-import { Play, X } from "lucide-react";
+import { Paperclip, Play, X } from "lucide-react";
 import { useState } from "react";
+import { summarize } from "../chat/attachments";
 import { useChat } from "../store/chat";
 
 /**
@@ -54,6 +55,19 @@ function Row({ id }: { id: string }) {
           >
             <X size={10} strokeWidth={2.2} />
           </button>
+        </span>
+      )}
+
+      {/* Summarised rather than shown as pills: a queued row is one line, and a
+          strip of thumbnails would crowd out the prompt it belongs to. */}
+      {item.attachments.length > 0 && (
+        <span
+          className="chip mode"
+          style={{ flexShrink: 0 }}
+          title={item.attachments.map((a) => a.path).join("\n")}
+        >
+          <Paperclip size={10} strokeWidth={2} />
+          {summarize(item.attachments)}
         </span>
       )}
 

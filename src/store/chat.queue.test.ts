@@ -7,13 +7,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * templates (composing at drain time gives every queued item the last mode you
  * picked, so `/explain this` then `/plan that` runs as two plans).
  */
-const sent: Array<{ command: string; message: string }> = [];
+const sent: Array<{ command: string; message: string; images?: unknown[] }> = [];
 
 vi.mock("../ipc/client", () => ({
   formatError: (e: unknown) => String(e),
   ipc: {
-    agentSend: vi.fn(async (_id: string, command: string, message: string) => {
-      sent.push({ command, message });
+    agentSend: vi.fn(async (_id: string, command: string, message: string, images?: unknown[]) => {
+      sent.push({ command, message, images });
     }),
     chatAppendTurn: vi.fn(async () => {}),
     chatTitle: vi.fn(async () => "title"),
@@ -21,6 +21,7 @@ vi.mock("../ipc/client", () => ({
     chatDeleteSession: vi.fn(async () => {}),
     chatTurns: vi.fn(async () => []),
     profilesResolve: vi.fn(async () => null),
+    attachmentRead: vi.fn(async () => ({ base64: "AAAA", mimeType: "image/png", size: 4 })),
   },
 }));
 
@@ -280,5 +281,59 @@ describe("the queue belongs to its conversation", () => {
     await useChat.getState().send(WS, "queued");
     await useChat.getState().loadSession("other-task");
     expect(useChat.getState().queue).toEqual([]);
+  });
+});
+
+describe("attachments belong to the queued item that carried them", () => {
+  const img = { path: "/w/shot.png", name: "shot.png", kind: "image" as const, size: 10 };
+  const log = { path: "/w/run.log", name: "run.log", kind: "file" as const, size: 10 };
+
+  it("does not give a queued prompt the attachments of a later one", async () => {
+    // The same trap as templates: composing at drain time would hand every
+    // queued item whatever happened to be attached last.
+    busyWithAgent();
+    await useChat.getState().send(WS, "look at this", "/w", [img]);
+    await useChat.getState().send(WS, "and this log", "/w", [log]);
+
+    const [a, b] = useChat.getState().queue;
+    expect(a.attachments.map((x) => x.name)).toEqual(["shot.png"]);
+    expect(b.attachments.map((x) => x.name)).toEqual(["run.log"]);
+  });
+
+  it("sends each queued item with its own attachments when it drains", async () => {
+    busyWithAgent();
+    await useChat.getState().send(WS, "the image one", "/w", [img]);
+    await useChat.getState().send(WS, "the file one", "/w", [log]);
+
+    finishTurn();
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    // The image went as bytes, and no path footer names it.
+    expect(sent[0].images).toHaveLength(1);
+    expect(sent[0].message).not.toContain("/w/shot.png");
+
+    finishTurn();
+    await vi.waitFor(() => expect(sent).toHaveLength(2));
+    // The file went as a path, with no image payload.
+    expect(sent[1].images).toHaveLength(0);
+    expect(sent[1].message).toContain("/w/run.log");
+  });
+
+  it("keeps the transcript showing what was attached", async () => {
+    useChat.setState({ taskId: "task-1", workspaceId: WS, status: "awaiting-input" });
+    await useChat.getState().send(WS, "here", "/w", [img]);
+
+    const userTurn = useChat.getState().turns.find((t) => t.role === "user");
+    expect(userTurn?.attachments?.map((a) => a.name)).toEqual(["shot.png"]);
+    // Bytes are not kept on the turn — the file is still on disk.
+    expect(userTurn?.attachments?.[0]).not.toHaveProperty("data");
+  });
+
+  it("sends an attachment with no text at all", async () => {
+    // Dropping a screenshot and pressing return is a clear enough request.
+    useChat.setState({ taskId: "task-1", workspaceId: WS, status: "awaiting-input" });
+    await useChat.getState().send(WS, "", "/w", [img]);
+
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0].images).toHaveLength(1);
   });
 });

@@ -58,6 +58,32 @@ impl RunningTask {
     }
 }
 
+/// An image in prime-agent's RPC shape (`ImageContent`): raw base64, no
+/// `data:` prefix, mime alongside. Verified against the installed bundle's
+/// `dist/modes/rpc/rpc-types.d.ts`.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct ImageContent {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub data: String,
+    #[serde(rename = "mimeType")]
+    pub mime_type: String,
+}
+
+/// Params for a conversational command.
+///
+/// Split out so the "no images looks exactly as it always did" promise is
+/// something a test can hold, rather than a claim about a closure.
+fn command_params(message: String, images: Vec<ImageContent>) -> Value {
+    let mut params = json!({ "message": message });
+    if !images.is_empty() {
+        if let Ok(v) = serde_json::to_value(&images) {
+            params["images"] = v;
+        }
+    }
+    params
+}
+
 #[derive(Default)]
 pub struct Supervisor {
     tasks: RwLock<HashMap<String, Arc<RunningTask>>>,
@@ -265,16 +291,26 @@ impl Supervisor {
     }
 
     /// Send a conversational command (prompt/steer/follow_up) to a running task.
+    ///
+    /// `images` is prime-agent's own field, carried straight into the model
+    /// call, so an attached screenshot is seen rather than described. It is
+    /// omitted entirely when empty: the line for a message with no images is
+    /// byte-identical to what this sent before images existed.
     pub async fn send(
         &self,
         task_id: &str,
         command: &str,
         message: String,
+        images: Vec<ImageContent>,
     ) -> Result<(), SupervisorError> {
         let running = self.get(task_id).ok_or(SupervisorError::NotRunning)?;
         running
             .dispatcher
-            .request(command, json!({ "message": message }), Duration::from_secs(15))
+            .request(
+                command,
+                command_params(message, images),
+                Duration::from_secs(15),
+            )
             .await?;
         Ok(())
     }
@@ -410,4 +446,59 @@ async fn forwarder(
     // child (kill_on_drop backstop).
     sup.remove(&task_id);
     drop(running);
+}
+
+#[cfg(test)]
+mod param_tests {
+    use super::*;
+
+    fn img(mime: &str) -> ImageContent {
+        ImageContent {
+            kind: "image".into(),
+            data: "AAAA".into(),
+            mime_type: mime.into(),
+        }
+    }
+
+    #[test]
+    fn a_message_with_no_images_is_exactly_what_it_always_was() {
+        // The whole safety of this change: every existing send must be
+        // byte-identical, so adding images cannot disturb a working path.
+        let params = command_params("hello".into(), vec![]);
+        assert_eq!(params, json!({ "message": "hello" }));
+        assert!(params.get("images").is_none());
+    }
+
+    #[test]
+    fn images_go_out_in_the_agents_own_shape() {
+        // Field names are prime-agent's, not ours: `type` and `mimeType`.
+        let params = command_params("look".into(), vec![img("image/png")]);
+        assert_eq!(
+            params,
+            json!({
+                "message": "look",
+                "images": [{ "type": "image", "data": "AAAA", "mimeType": "image/png" }]
+            })
+        );
+    }
+
+    #[test]
+    fn several_images_keep_their_order() {
+        let params = command_params(
+            "two".into(),
+            vec![img("image/png"), img("image/jpeg")],
+        );
+        let images = params["images"].as_array().unwrap();
+        assert_eq!(images.len(), 2);
+        assert_eq!(images[0]["mimeType"], "image/png");
+        assert_eq!(images[1]["mimeType"], "image/jpeg");
+    }
+
+    #[test]
+    fn the_line_stays_single_line_so_jsonl_framing_holds() {
+        // Base64 never contains a newline, but the framing is LF-delimited and
+        // a stray newline here would desynchronise the whole stream.
+        let params = command_params("x".into(), vec![img("image/png")]);
+        assert!(!serde_json::to_string(&params).unwrap().contains('\n'));
+    }
 }

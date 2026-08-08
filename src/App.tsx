@@ -10,6 +10,7 @@ import {
   Library,
   Link2,
   NotebookPen,
+  Plus,
   FolderPlus,
   GitBranch,
   Moon,
@@ -26,6 +27,7 @@ import { EditorPane } from "./components/EditorPane";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FileTree } from "./components/FileTree";
 import { Palette, type PaletteMode } from "./components/Palette";
+import { AttachmentStrip } from "./components/AttachmentStrip";
 import { QueuedList } from "./components/QueuedList";
 import { QuitGuard } from "./components/QuitGuard";
 import { ReviewPanel } from "./components/ReviewPanel";
@@ -44,6 +46,7 @@ import { SlashMenu } from "./components/SlashMenu";
 import { TerminalDock } from "./terminal/TerminalDock";
 import { TabStrip } from "./components/TabStrip";
 import { VoiceButton } from "./components/VoiceButton";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { formatError, ipc, onFsChanged, type AgentCommand, type WorkspaceView } from "./ipc/client";
 import { findTemplate } from "./commands/prompts";
 import { useLayout } from "./store/layout";
@@ -112,10 +115,14 @@ export default function App() {
   const prompt = useComposer((s) => s.text);
   const setPrompt = useComposer((s) => s.setText);
   const composerFocusTick = useComposer((s) => s.focusTick);
+  const attachments = useComposer((s) => s.attachments);
+  const attach = useComposer((s) => s.attach);
+  const clearComposer = useComposer((s) => s.clear);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [recent, setRecent] = useState<WorkspaceView[]>([]);
   const [commandNote, setCommandNote] = useState<string | null>(null);
+  const [dropping, setDropping] = useState(false);
   const mode = useLayout((s) => s.mode);
   const setMode = useLayout((s) => s.setMode);
   const railTab = useLayout((s) => s.railTab);
@@ -334,17 +341,67 @@ export default function App() {
     window.setTimeout(() => setCommandNote(null), 4000);
   };
 
+  // Files dropped onto the window.
+  //
+  // Tauri's own event, not React's onDrop: `dragDropEnabled` defaults to true,
+  // which means the webview's native handler takes the drop and HTML5 drop
+  // events never fire. It is also the better source — this gives real
+  // filesystem paths, and a path is what the agent is handed either way. An
+  // HTML5 `File` has no path at all.
+  useEffect(() => {
+    const un = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "over") {
+        setDropping(true);
+        return;
+      }
+      if (event.payload.type === "leave") {
+        setDropping(false);
+        return;
+      }
+      setDropping(false);
+      const paths = event.payload.paths;
+      if (!paths?.length) return;
+      // Sizes and folder-rejection come from Rust; a drop is only paths.
+      void ipc
+        .attachmentDescribe(paths)
+        .then((files) => {
+          attach(files);
+          focusChat();
+        })
+        .catch((e) => setCommandNote(formatError(e)));
+    });
+    return () => {
+      void un.then((f) => f());
+    };
+  }, [attach]);
+
   const busy = chatStatus === "starting" || chatStatus === "streaming";
   // No `!busy`: typing while a turn runs is the point — it queues instead of
   // blocking, and the queue starts itself when the agent is free.
-  const canRun = Boolean(workspace && resolvedProfile && prompt.trim());
+  //
+  // Attachments count as content on their own: dropping a screenshot and
+  // pressing ↵ with no words is a perfectly clear request to look at it.
+  const canRun = Boolean(
+    workspace && resolvedProfile && (prompt.trim() || attachments.length > 0),
+  );
+
+  const pickAttachments = async () => {
+    try {
+      const picked = await ipc.attachmentPick();
+      if (picked.length > 0) attach(picked);
+    } catch (e) {
+      setCommandNote(formatError(e));
+    }
+  };
 
   const submit = () => {
     if (!canRun || !workspace) return;
     const p = prompt.trim();
+    const files = attachments;
     setPrompt("");
+    clearComposer(); // takes the attachments with it — they went with the message
     focusChat(); // sending from a file tab lands you where the answer appears
-    void sendMessage(workspace.id, p, workspace.rootPath);
+    void sendMessage(workspace.id, p, workspace.rootPath, files);
   };
 
   return (
@@ -585,7 +642,13 @@ export default function App() {
           </ErrorBoundary>
         </main>
 
-        <footer className="composer">
+        <footer
+        className="composer"
+        // Not a drop handler — Tauri owns the drop. This only shows that the
+        // window will take it, which is the whole of what a drop target has to
+        // communicate before you let go.
+        style={dropping ? { outline: "1px solid var(--clay-text)", outlineOffset: -1 } : undefined}
+      >
           {voiceError && (
             <div className="composer-meta" role="alert">
               <span style={{ color: "var(--error)", fontSize: "var(--text-xs)" }}>{voiceError}</span>
@@ -620,6 +683,7 @@ export default function App() {
             </div>
           )}
           <QueuedList />
+          <AttachmentStrip />
           {commandNote && (
             <div className="composer-meta" role="status">
               <span style={{ color: "var(--ink-muted)", fontSize: "var(--text-xs)" }}>{commandNote}</span>
@@ -661,6 +725,15 @@ export default function App() {
                 }
               }}
             />
+            <button
+              className="btn icon"
+              disabled={!workspace}
+              onClick={() => void pickAttachments()}
+              aria-label="Add files to this message"
+              title="Add files — or drop them anywhere"
+            >
+              <Plus size={16} strokeWidth={1.8} />
+            </button>
             <VoiceButton
               phase={voicePhase}
               elapsedMs={voiceElapsed}

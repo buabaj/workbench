@@ -1,5 +1,6 @@
 pub mod agent_setup;
 pub mod appai;
+pub mod attachments;
 pub mod creds;
 pub mod links;
 pub mod profiles;

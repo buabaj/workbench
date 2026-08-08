@@ -1,0 +1,11 @@
+-- What was attached to a user turn, so reopening a conversation still shows it.
+--
+-- Paths, not bytes. A screenshot is megabytes and the transcript is not the
+-- right place to store a second copy of it — the pill needs the name and the
+-- kind, and the file itself is still on disk. A file that has since moved shows
+-- as missing, which is the truth, rather than disappearing from the record.
+--
+-- JSON in a column rather than a side table: attachments are read and written
+-- only with the turn they belong to, never queried across turns, and
+-- `chat_append_turn` already writes a turn in a single upsert.
+ALTER TABLE chat_turns ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]';

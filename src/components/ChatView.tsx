@@ -1,5 +1,6 @@
-import { Check, X } from "lucide-react";
+import { Check, FileText, Image as ImageIcon, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import type { Attachment } from "../chat/attachments";
 import { AgentOrb, PHASE_LABEL } from "./AgentOrb";
 import { Markdown } from "./Markdown";
 import { useChat, type Turn } from "../store/chat";
@@ -118,11 +119,54 @@ function UserText({ text }: { text: string }) {
   );
 }
 
+/**
+ * What was attached, on the turn it was attached to.
+ *
+ * The record should say what the agent was given, not only what was typed —
+ * scrolling back to "why did it think that?" is a different question if the
+ * message came with a screenshot.
+ */
+function TurnAttachments({ attachments }: { attachments: Attachment[] }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+      {attachments.map((a) => (
+        <span
+          key={a.path}
+          className="chip"
+          title={a.path}
+          style={{ fontSize: "var(--text-xs)", maxWidth: 220 }}
+        >
+          {a.kind === "image" ? (
+            <ImageIcon size={10} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+          ) : (
+            <FileText size={10} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+          )}
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {a.name}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function TurnView({ turn }: { turn: Turn }) {
   if (turn.role === "user") {
     return (
       <div className="turn-user">
+        {turn.attachments?.length ? <TurnAttachments attachments={turn.attachments} /> : null}
         <UserText text={turn.text} />
+        {/* A user turn can carry a notice too: an image that would not load is
+            said here rather than leaving you to infer it from an answer that
+            never mentions the picture. */}
+        {turn.notice && (
+          <div
+            role="status"
+            style={{ color: "var(--error)", fontSize: "var(--text-xs)", marginTop: 6 }}
+          >
+            {turn.notice}
+          </div>
+        )}
       </div>
     );
   }
